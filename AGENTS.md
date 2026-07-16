@@ -27,15 +27,9 @@ Uses the mattpocock/skills workflow (installed in `.agents/skills/`; Codex reads
 4. `/tdd` or `/implement` — implementation
 5. `/code-review`, `/grill-me` — design review
 
-## Current Status (2026-07-16)
+## Where work is tracked
 
-- GitHub repo (private, will go public later): https://github.com/jerryxcy/lucky-wheel
-- `/grill-with-docs` ✅: architecture settled (stateless server, ADR-0001), glossary (CONTEXT.md), MVP scope
-- `/to-spec` ✅: MVP spec in GitHub Issue #1 (label: ready-for-agent)
-- `/prototype` ✅: settled on the stage layout with the P0 original palette; verdict commented on Issue #1; prototype source lives on throwaway branch `prototype/ui` (`ui-prototype/` is `.gitignore`d, not on main)
-- Spring Boot skeleton ✅: Java 21, Boot 3.5.14, Maven wrapper, Web + Validation; namespace `io.github.jerryxcy.luckywheel`; `./mvnw clean test` green (context smoke test only so far)
-- Next: `/to-tickets` → `/tdd`
-- Minor follow-ups: LICENSE + empty pom placeholders (url/licenses/developers/scm), `spring.application.name` to kebab-case, GitHub Actions CI, README
+Spec: issue #1. Tickets: its sub-issues, with native blocked-by dependencies — work any open ticket whose blockers are closed. The UI prototype verdict (stage layout, P0 original palette) is commented on issue #1; prototype source lives on the throwaway branch `prototype/ui` (`ui-prototype/` is `.gitignore`d, not on main).
 
 ## Agent skills
 
