@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lucky Wheel 抽籤轉盤</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main>
+        <h1>Lucky Wheel 抽籤轉盤</h1>
+
+        <section id="roster-section" aria-labelledby="roster-heading">
+            <h2 id="roster-heading">名單 Roster</h2>
+
+            <form id="add-member-form">
+                <label for="member-name-input" class="visually-hidden">成員姓名</label>
+                <input
+                    type="text"
+                    id="member-name-input"
+                    name="memberName"
+                    placeholder="輸入姓名後按 Enter 或「新增」"
+                    autocomplete="off"
+                >
+                <button type="submit">新增</button>
+            </form>
+            <p id="add-member-notice" class="notice" role="alert" hidden></p>
+
+            <ul id="member-list"></ul>
+            <p id="empty-roster-notice" class="notice" hidden>名單目前是空的，請先新增成員。</p>
+        </section>
+
+        <section id="spin-section" aria-labelledby="spin-heading">
+            <h2 id="spin-heading">抽籤 Spin</h2>
+
+            <div id="spin-controls">
+                <label for="count-select">抽出人數</label>
+                <select id="count-select"></select>
+                <button type="button" id="order-everyone-button">排全員順序</button>
+            </div>
+
+            <button type="button" id="spin-button">開始抽籤</button>
+            <p id="spin-disabled-reason" class="notice" hidden></p>
+            <p id="spin-error" class="notice" role="alert" hidden></p>
+        </section>
+
+        <section id="result-section" aria-labelledby="result-heading">
+            <h2 id="result-heading">抽籤結果 Draw order</h2>
+            <ol id="draw-order-list"></ol>
+            <p id="no-result-notice" class="notice">尚未進行抽籤。</p>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
