@@ -27,6 +27,10 @@ Uses the mattpocock/skills workflow (installed in `.agents/skills/`, symlinked t
 4. `/tdd` or `/implement` — implementation
 5. `/code-review`, `/grill-me` — design review
 
+### Ticket workflow
+
+One ticket = one fresh agent context. Each ticket ships as a branch + PR that references its issue (`Closes #N`): branch → PR → CI green → merge to main. Direct pushes to main are reserved for docs-only changes.
+
 ## Where work is tracked
 
 Spec: issue #1. Tickets: its sub-issues, with native blocked-by dependencies — work any open ticket whose blockers are closed. The UI prototype verdict (stage layout, P0 original palette) is commented on issue #1; prototype source lives on the throwaway branch `prototype/ui` (`ui-prototype/` is `.gitignore`d, not on main).
