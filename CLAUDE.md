@@ -29,7 +29,7 @@ Uses the mattpocock/skills workflow (installed in `.agents/skills/`, symlinked t
 
 ### Ticket workflow
 
-One ticket = one fresh agent context. Each ticket ships as a branch + PR that references its issue (`Closes #N`): branch → PR → CI green → merge to main. Direct pushes to main are reserved for docs-only changes.
+One ticket = one fresh agent context. Each ticket ships as a branch + PR that references its issue (`Closes #N`): branch → PR → CI green → `/code-review` on the PR diff (Standards + Spec axes) → findings fixed → merge, and the merge decision belongs to the user, never the implementing agent. Direct pushes to main are reserved for docs-only changes.
 
 ## Where work is tracked
 
