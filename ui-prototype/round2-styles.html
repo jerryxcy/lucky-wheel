@@ -1,0 +1,484 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Round 2 answer: P0's original palette won for the B
+  stage layout. P1-P3 remain comparison sources via ?variant=P0|P1|P2|P3.
+  No backend: the spin is stubbed client-side (stands in for POST /api/spins).
+  State is in-memory only. Do not promote this file to production.
+-->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lucky Wheel — 色票 Prototype</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font-family: "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; background: var(--bg); color: var(--ink); transition: background .2s, color .2s; }
+  button { font-family: inherit; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input, textarea { font-family: inherit; }
+  canvas { display: block; max-width: min(560px, calc(100vw - 32px)); height: auto; }
+
+  /* P0 is the round-1 baseline; P1-P3 are the refined candidates. */
+  body[data-theme=P0] {
+    --bg: radial-gradient(ellipse at 50% 30%, #2a2f4a 0%, #14172b 75%) fixed, #14172b;
+    --ink: #f0f1f7; --muted: #99a0b2;
+    --accent: linear-gradient(160deg, #ffe08a, #e8b94f); --accent-solid: #ffd166; --accent-ink: #14172b;
+    --panel: #1d2136f2; --panel-border: #353c5b; --field-bg: #262b45; --field-border: #454d70;
+    --chrome-bg: rgba(255,255,255,.06); --chrome-border: #59617f; --chrome-ink: #d6d9e4;
+    --pointer: #ffd166; --glow: 0 5px 28px rgba(255,209,102,.38);
+    --overlay-bg: rgba(10,12,24,.94); --bottom-fade: linear-gradient(transparent, rgba(0,0,0,.55)); --title-ls: 4px;
+  }
+  body[data-theme=P1] {
+    --bg: radial-gradient(ellipse at 50% 32%, #29251f 0%, #151310 58%, #0b0b0a 100%) fixed, #0b0b0a;
+    --ink: #ece5d8; --muted: #8d8878;
+    --accent: linear-gradient(160deg, #d8bd86, #a77b43); --accent-solid: #c4a56c; --accent-ink: #21180d;
+    --panel: #171512f2; --panel-border: #393229; --field-bg: #211e19; --field-border: #433a2f;
+    --chrome-bg: rgba(236,229,216,.045); --chrome-border: #494137; --chrome-ink: #d2c8b6;
+    --pointer: #c7a664; --glow: 0 7px 34px rgba(180,139,72,.30);
+    --overlay-bg: rgba(10,9,8,.95); --bottom-fade: linear-gradient(transparent, rgba(0,0,0,.68)); --title-ls: 6px;
+  }
+  body[data-theme=P2] {
+    --bg: radial-gradient(ellipse at 50% 34%, #1d2b33 0%, #10191f 60%, #080d11 100%) fixed, #080d11;
+    --ink: #eaf0ee; --muted: #819398;
+    --accent: linear-gradient(160deg, #d6dfdc, #8ea6a2); --accent-solid: #a9bbb7; --accent-ink: #10201f;
+    --panel: #101a20f2; --panel-border: #293a41; --field-bg: #17242b; --field-border: #344950;
+    --chrome-bg: rgba(223,235,232,.05); --chrome-border: #3c5056; --chrome-ink: #c7d3d0;
+    --pointer: #c1d0cc; --glow: 0 7px 34px rgba(122,158,153,.26);
+    --overlay-bg: rgba(7,13,17,.95); --bottom-fade: linear-gradient(transparent, rgba(2,8,11,.72)); --title-ls: 5px;
+  }
+  body[data-theme=P3] {
+    --bg: linear-gradient(165deg, #f0ede6 0%, #dfdbd1 55%, #d2cdc2 100%) fixed, #e5e1d8;
+    --ink: #2b302e; --muted: #777b76;
+    --accent: linear-gradient(160deg, #545c58, #2d3431); --accent-solid: #4c5551; --accent-ink: #f7f5ef;
+    --panel: rgba(247,245,239,.94); --panel-border: #c9c4b9; --field-bg: #eeebe4; --field-border: #c8c2b6;
+    --chrome-bg: rgba(255,255,255,.48); --chrome-border: #bab5aa; --chrome-ink: #4d5350;
+    --pointer: #8f4f46; --glow: 0 12px 34px rgba(80,72,60,.22);
+    --overlay-bg: rgba(238,235,228,.96); --bottom-fade: linear-gradient(transparent, rgba(210,205,194,.92)); --title-ls: 5px;
+  }
+
+  /* ============ stage layout (winner of round 1) ============ */
+  #app { min-height: 100vh; position: relative; overflow: hidden; }
+  .top { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; z-index: 3; }
+  .top h1 { font-size: 15px; letter-spacing: var(--title-ls); color: var(--muted); font-weight: 600; }
+  .gear { border: 1px solid var(--chrome-border); background: var(--chrome-bg); color: var(--chrome-ink); border-radius: 9px; padding: 8px 15px; font-size: 14px; backdrop-filter: blur(6px); }
+  .stage { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 70px 16px 150px; }
+  .banner { min-height: 36px; font-size: 25px; font-weight: 700; text-align: center; color: var(--accent-solid); text-shadow: 0 0 22px color-mix(in srgb, var(--accent-solid) 45%, transparent); }
+  .wheelBox { position: relative; filter: drop-shadow(0 18px 30px rgba(0,0,0,.28)); }
+  body[data-theme=P3] .wheelBox { filter: drop-shadow(0 18px 28px rgba(83,76,65,.24)); }
+  .wheelBox .ptr { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 24px solid var(--pointer); filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); z-index: 2; }
+  .bottom { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 22px; flex-wrap: wrap; padding: 18px 18px 86px; background: var(--bottom-fade); z-index: 3; }
+  .bottom label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--chrome-ink); }
+  .stepper { display: flex; align-items: center; gap: 10px; }
+  .stepper button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--chrome-border); background: var(--chrome-bg); color: var(--ink); font-size: 16px; }
+  .stepper b { min-width: 74px; text-align: center; font-size: 15px; }
+  .ghostBtn { padding: 9px 18px; border: 1px solid var(--chrome-border); border-radius: 22px; background: var(--chrome-bg); color: var(--chrome-ink); font-size: 14px; }
+  .spinBtn { padding: 15px 62px; font-size: 21px; font-weight: 800; letter-spacing: 5px; border: 0; border-radius: 40px; color: var(--accent-ink); background: var(--accent); box-shadow: var(--glow); transition: transform .1s; }
+  .spinBtn:not(:disabled):hover { transform: scale(1.04); }
+
+  /* drawer */
+  .drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 336px; background: var(--panel); border-left: 1px solid var(--panel-border); backdrop-filter: blur(10px); padding: 22px; transform: translateX(100%); transition: transform .25s; box-shadow: -8px 0 26px rgba(0,0,0,.25); overflow-y: auto; z-index: 5; }
+  .drawer.open { transform: none; }
+  .drawer h2 { font-size: 15px; margin-bottom: 14px; color: var(--accent-solid); }
+  .drawer .addrow { display: flex; gap: 6px; margin-bottom: 10px; }
+  .drawer input, .drawer textarea { background: var(--field-bg); border: 1px solid var(--field-border); color: var(--ink); border-radius: 7px; padding: 8px; }
+  .drawer .addrow input { flex: 1; min-width: 0; }
+  .drawer .addrow button { border: 0; border-radius: 7px; background: var(--accent); color: var(--accent-ink); padding: 0 14px; font-weight: 700; }
+  .drawer ul { list-style: none; }
+  .drawer li { display: flex; gap: 9px; align-items: center; padding: 7px 2px; border-bottom: 1px solid var(--panel-border); }
+  .drawer li.out span.nm { color: var(--muted); text-decoration: line-through; }
+  .drawer span.nm { flex: 1; }
+  .drawer button.del { border: 0; background: none; color: #e0566b; font-size: 15px; }
+  .drawer details { margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .drawer textarea { width: 100%; height: 66px; margin: 6px 0; }
+  .drawer .mini { border: 1px solid var(--chrome-border); background: var(--chrome-bg); color: var(--chrome-ink); border-radius: 7px; padding: 6px 11px; font-size: 12px; }
+  .drawer .sideBtns { display: flex; gap: 6px; margin-top: 14px; }
+  .drawer .sideBtns button { flex: 1; border: 1px solid var(--chrome-border); background: var(--chrome-bg); color: var(--chrome-ink); border-radius: 7px; padding: 8px 2px; font-size: 12px; }
+
+  /* result overlay */
+  .overlay { position: absolute; inset: 0; background: var(--overlay-bg); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; z-index: 6; }
+  .overlay h2 { color: var(--accent-solid); font-size: 19px; letter-spacing: 4px; }
+  .overlay ol { font-size: 26px; line-height: 1.9; padding-left: 42px; }
+  .overlay ol li::marker { color: var(--muted); font-size: 18px; }
+  .overlay button { margin-top: 8px; padding: 10px 36px; border-radius: 24px; border: 1px solid var(--chrome-border); background: var(--chrome-bg); color: var(--chrome-ink); }
+  .hidden { display: none !important; }
+
+  /* toggle switch */
+  .sw { position: relative; width: 40px; height: 22px; appearance: none; background: var(--field-border); border-radius: 12px; outline: none; cursor: pointer; transition: background .15s; flex: none; }
+  .sw:checked { background: var(--accent-solid); }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+  .sw:checked::after { left: 20px; }
+
+  /* Palette notes are prototype chrome, not part of the chosen B layout. */
+  .paletteCard { position: absolute; top: 70px; left: 24px; width: 224px; padding: 14px 15px; border: 1px solid var(--chrome-border); border-radius: 12px; background: var(--chrome-bg); color: var(--chrome-ink); backdrop-filter: blur(10px); z-index: 3; }
+  .paletteCard .eyebrow { display: block; margin-bottom: 7px; font-size: 9px; letter-spacing: 2px; color: var(--muted); }
+  .paletteCard strong { display: block; margin-bottom: 5px; color: var(--ink); font-size: 15px; }
+  .paletteCard p { min-height: 48px; font-size: 12px; line-height: 1.55; color: var(--muted); }
+  .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 10px; }
+  .swatches span { height: 22px; border-radius: 4px; border: 1px solid rgba(255,255,255,.18); box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
+
+  /* ============ floating switcher (prototype chrome, not the design) ============ */
+  #switcher { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: #111; color: #fff; border-radius: 24px; padding: 8px 14px; font-size: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.4); z-index: 99; opacity: .93; }
+  #switcher button { background: #333; color: #fff; border: 0; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; }
+  #switcher .lbl { min-width: 160px; text-align: center; }
+  #switcher .tag { color: #f66; font-size: 10px; letter-spacing: 1px; }
+  @media (max-width: 900px) { .paletteCard { display: none; } }
+</style>
+</head>
+<body data-theme="P0">
+
+<div id="app">
+  <div class="top">
+    <h1>LUCKY WHEEL</h1>
+    <button class="gear" data-role="gear">⚙ 名單</button>
+  </div>
+  <aside class="paletteCard" aria-label="目前色票">
+    <span class="eyebrow">PALETTE STUDY</span>
+    <strong data-role="paletteName"></strong>
+    <p data-role="paletteIntent"></p>
+    <div class="swatches" data-role="swatches"></div>
+  </aside>
+  <div class="stage">
+    <div class="banner" data-role="banner"></div>
+    <div class="wheelBox"><div class="ptr"></div><canvas data-role="wheel" width="560" height="560"></canvas></div>
+  </div>
+  <div class="bottom">
+    <div class="stepper">
+      <button data-role="minus">−</button><b data-role="countLbl">抽 1 人</b><button data-role="plus">＋</button>
+    </div>
+    <button class="ghostBtn" data-role="orderAll">全員排序</button>
+    <label><input type="checkbox" class="sw" data-role="autoRemove"> 抽中自動移除</label>
+    <button class="spinBtn" data-role="spin">SPIN</button>
+    <button class="ghostBtn" data-role="skip" style="display:none">跳過</button>
+  </div>
+  <div class="drawer" data-role="drawer">
+    <h2>名單（勾選 = 參加抽選）</h2>
+    <div class="addrow"><input placeholder="輸入名字後 Enter" data-role="addName"><button data-role="addBtn">加</button></div>
+    <ul data-role="list"></ul>
+    <details>
+      <summary>批次貼上匯入</summary>
+      <textarea data-role="bulk" placeholder="一行一個名字，或用逗號分隔"></textarea>
+      <button class="mini" data-role="bulkBtn">匯入</button>
+      <span data-role="bulkMsg"></span>
+    </details>
+    <div class="sideBtns">
+      <button data-role="checkAll">全部重勾</button>
+      <button data-role="copy">複製名單</button>
+      <button data-role="closeDrawer">關閉</button>
+    </div>
+  </div>
+  <div class="overlay hidden" data-role="overlay">
+    <h2>抽選結果</h2>
+    <ol data-role="results"></ol>
+    <button data-role="closeOverlay">關閉</button>
+  </div>
+</div>
+
+<!-- floating switcher — prototype chrome, not part of any design -->
+<div id="switcher">
+  <button id="swPrev">←</button>
+  <div class="lbl"><span class="tag">ROUND 2 · PALETTE</span><br><span id="swLbl"></span></div>
+  <button id="swNext">→</button>
+</div>
+
+<script>
+"use strict";
+/* ---------- shared in-memory state ---------- */
+const state = {
+  members: ["小明", "小華", "阿強", "小美", "阿傑", "佩佩", "大衛", "安安"]
+    .map(name => ({ name, eligible: true })),
+  count: 1,
+  autoRemove: false,
+  lastDraw: [],
+  spinning: false,
+};
+const eligibleNames = () => state.members.filter(m => m.eligible).map(m => m.name);
+
+/* Stub for POST /api/spins — same contract: members + count in, drawOrder out. */
+function apiSpinStub(members, count) {
+  const a = [...members];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return { drawOrder: a.slice(0, count) };
+}
+
+/* ---------- wheel themes ---------- */
+const themes = {
+  P0: {
+    name: "原版・定案",
+    intent: "保留第一輪配色：辨識度、歡樂感與舞台焦點最平衡。",
+    palette: ["#ffd166", "#ef476f", "#06d6a0", "#118ab2", "#f78c6b", "#7b61a8"],
+    text: "#f0f1f7", labelLight: "#ffffff", labelDark: "#14172b", rim: "#f0f1f7", rimWidth: 7, rimInner: "#14172b",
+    hub: "#f0f1f7", hubRing: "#ffd166", separator: "rgba(255,255,255,.35)", gloss: .14, edge: .06,
+  },
+  P1: {
+    name: "漆夜・朱金",
+    intent: "漆紅、松綠、藍黑與古銅；偏日式漆器與精品酒吧。",
+    palette: ["#7a3028", "#304238", "#a98248", "#374a5c", "#684957", "#856044"],
+    text: "#f2eadb", labelLight: "#f2eadb", labelDark: "#20170d", rim: "#b9975c", rimWidth: 8, rimInner: "#17130e",
+    hub: "#171512", hubRing: "#c4a56c", separator: "rgba(237,222,193,.20)", gloss: .08, edge: .12,
+  },
+  P2: {
+    name: "煙燻・寶石",
+    intent: "祖母綠、藍寶、石榴與紫晶壓低彩度，暗場仍有辨識度。",
+    palette: ["#28504c", "#354d6b", "#6b3d4a", "#51456b", "#7a6134", "#315961"],
+    text: "#eef3f1", labelLight: "#eef3f1", labelDark: "#0c1718", rim: "#91a7a3", rimWidth: 7, rimInner: "#0c151a",
+    hub: "#111d22", hubRing: "#b3c3bf", separator: "rgba(218,232,228,.18)", gloss: .07, edge: .13,
+  },
+  P3: {
+    name: "礦物・霧面",
+    intent: "石灰、鼠尾草、板岩與陶土；明亮、安靜，但不帶糖果感。",
+    palette: ["#b8b2a6", "#94a198", "#8293a5", "#b88e7d", "#9d91a5", "#c0a56f"],
+    text: "#28302d", labelLight: "#ffffff", labelDark: "#202522", rim: "#f7f4ed", rimWidth: 10, rimInner: "#9a968d",
+    hub: "#f5f2ea", hubRing: "#6e7772", separator: "rgba(255,255,255,.72)", gloss: .035, edge: .045,
+  },
+};
+
+/* ---------- wheel (canvas) ---------- */
+class Wheel {
+  constructor(canvas) {
+    this.ctx = canvas.getContext("2d");
+    this.size = canvas.width;
+    this.names = [];
+    this.rotation = 0;
+    this.theme = themes.P0;
+  }
+  setTheme(t) { this.theme = t; this.draw(); }
+  setNames(names) { this.names = names; this.draw(); }
+  draw() {
+    const { ctx, size, theme } = this, cx = size / 2, cy = size / 2;
+    const rOuter = size / 2 - 6, r = rOuter - theme.rimWidth - 3;
+    ctx.clearRect(0, 0, size, size);
+    const n = this.names.length;
+    // rim
+    ctx.save();
+    if (theme.rimGlow) { ctx.shadowColor = theme.rimGlow; ctx.shadowBlur = 18; }
+    ctx.beginPath(); ctx.arc(cx, cy, rOuter, 0, 7);
+    ctx.lineWidth = theme.rimWidth; ctx.strokeStyle = theme.rim; ctx.stroke();
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx, cy, rOuter - theme.rimWidth / 2 - 1.5, 0, 7);
+    ctx.lineWidth = 3; ctx.strokeStyle = theme.rimInner; ctx.stroke();
+    if (n === 0) {
+      ctx.fillStyle = theme.separator; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+      ctx.fillStyle = theme.text; ctx.font = "16px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("名單是空的", cx, cy);
+      return;
+    }
+    const seg = Math.PI * 2 / n;
+    for (let i = 0; i < n; i++) {
+      const a0 = this.rotation + i * seg;
+      let fill = theme.palette[i % theme.palette.length];
+      if (n % theme.palette.length === 1 && i === n - 1) fill = theme.palette[1];
+      // segment with subtle radial depth
+      const grad = ctx.createRadialGradient(cx, cy, r * .15, cx, cy, r);
+      grad.addColorStop(0, tone(fill, theme.gloss));
+      grad.addColorStop(.72, fill);
+      grad.addColorStop(1, tone(fill, -theme.edge));
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, a0, a0 + seg); ctx.closePath();
+      ctx.fillStyle = grad; ctx.fill();
+      ctx.strokeStyle = theme.separator; ctx.lineWidth = 2; ctx.stroke();
+      // name
+      ctx.save();
+      ctx.translate(cx, cy); ctx.rotate(a0 + seg / 2);
+      ctx.textAlign = "right"; ctx.fillStyle = contrastText(fill, theme);
+      ctx.font = `600 ${Math.min(17, Math.max(12, r / 9))}px sans-serif`;
+      let nm = this.names[i]; if (nm.length > 8) nm = nm.slice(0, 7) + "…";
+      ctx.fillText(nm, r - 16, 6);
+      ctx.restore();
+    }
+    // hub
+    ctx.beginPath(); ctx.arc(cx, cy, r * .13, 0, 7); ctx.fillStyle = theme.hub; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = theme.hubRing; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, r * .045, 0, 7); ctx.fillStyle = theme.hubRing; ctx.fill();
+  }
+  spinTo(index, duration, skipToken) {
+    if (window.__instant) { this.draw(); return Promise.resolve(); } // test hook: embedded panes throttle hidden-tab timers
+    return new Promise(resolve => {
+      const n = this.names.length, seg = Math.PI * 2 / n;
+      const pointer = -Math.PI / 2;
+      const centre = (index + .5) * seg;
+      let target = pointer - centre;
+      const turns = 4 * Math.PI * 2;
+      target = this.rotation + turns + ((target - this.rotation - turns) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+      const from = this.rotation, delta = target - from, t0 = performance.now();
+      const ease = t => 1 - Math.pow(1 - t, 3);
+      const step = () => {
+        if (skipToken.skipped) { this.rotation = target; this.draw(); resolve(); return; }
+        const t = Math.min(1, (performance.now() - t0) / duration);
+        this.rotation = from + delta * ease(t);
+        this.draw();
+        if (t < 1) setTimeout(step, 16); else resolve();
+      };
+      step();
+    });
+  }
+}
+function tone(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const target = amt >= 0 ? 255 : 0;
+  const amount = Math.abs(amt);
+  const f = c => Math.max(0, Math.min(255, Math.round(c + (target - c) * amount)));
+  return `rgb(${f(n >> 16 & 255)},${f(n >> 8 & 255)},${f(n & 255)})`;
+}
+function luminance(hex) {
+  const channels = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map(v => v <= .04045 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4));
+  return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+}
+function contrastRatio(a, b) {
+  const l1 = luminance(a), l2 = luminance(b);
+  return (Math.max(l1, l2) + .05) / (Math.min(l1, l2) + .05);
+}
+function contrastText(fill, theme) {
+  return contrastRatio(fill, theme.labelLight) >= contrastRatio(fill, theme.labelDark)
+    ? theme.labelLight : theme.labelDark;
+}
+const sleep = (ms, skipToken) => window.__instant ? Promise.resolve() : new Promise(res => {
+  const t0 = performance.now();
+  const iv = setInterval(() => {
+    if (skipToken.skipped || performance.now() - t0 >= ms) { clearInterval(iv); res(); }
+  }, 50);
+});
+
+/* ---------- app wiring (single layout — round 1's winner) ---------- */
+const $ = role => document.querySelector(`[data-role=${role}]`);
+const wheel = new Wheel($("wheel"));
+let skipToken = null;
+
+function dedupAdd(raw) {
+  const existing = new Set(state.members.map(m => m.name));
+  let added = 0, skipped = 0;
+  raw.split(/[\n,、，;；]+/).map(s => s.trim()).filter(Boolean).forEach(nm => {
+    if (existing.has(nm)) { skipped++; return; }
+    existing.add(nm); state.members.push({ name: nm, eligible: true }); added++;
+  });
+  return { added, skipped };
+}
+function render() {
+  const list = $("list"); list.innerHTML = "";
+  state.members.forEach(m => {
+    const li = document.createElement("li");
+    li.className = m.eligible ? "" : "out";
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = m.eligible;
+    cb.onchange = () => { if (state.spinning) { cb.checked = m.eligible; return; } m.eligible = cb.checked; render(); };
+    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = m.name;
+    const del = document.createElement("button"); del.className = "del"; del.textContent = "×";
+    del.onclick = () => { if (state.spinning) return; state.members = state.members.filter(x => x !== m); render(); };
+    li.append(cb, nm, del);
+    list.appendChild(li);
+  });
+  const el = eligibleNames();
+  state.count = Math.min(Math.max(1, state.count), Math.max(1, el.length));
+  $("countLbl").textContent = state.count === el.length && el.length > 1 ? `全員（${el.length}）` : `抽 ${state.count} 人`;
+  $("autoRemove").checked = state.autoRemove;
+  $("spin").disabled = state.spinning || el.length === 0;
+  if (!state.spinning) wheel.setNames(el);
+}
+function startSpin() {
+  if (state.spinning) return;
+  const names = eligibleNames();
+  if (names.length === 0) return;
+  const count = Math.min(Math.max(1, state.count), names.length);
+  state.spinning = true; state.lastDraw = [];
+  const { drawOrder } = apiSpinStub(names, count);   // ← future POST /api/spins
+  skipToken = { skipped: false };
+  $("skip").style.display = ""; $("spin").disabled = true;
+  $("banner").textContent = ""; $("overlay").classList.add("hidden");
+  (async () => {
+    let remaining = [...names];
+    for (let i = 0; i < drawOrder.length; i++) {
+      const name = drawOrder[i];
+      if (!skipToken.skipped) {
+        wheel.setNames(remaining);
+        await sleep(i === 0 ? 150 : 450, skipToken);
+        await wheel.spinTo(remaining.indexOf(name), i === 0 ? 2300 : 1500, skipToken);
+      }
+      if (!skipToken.skipped) {
+        state.lastDraw.push(name);
+        $("banner").textContent = `第 ${i + 1} 位：${name}`;
+        await sleep(700, skipToken);
+      }
+      remaining.splice(remaining.indexOf(name), 1);
+    }
+    if (skipToken.skipped) state.lastDraw = [...drawOrder];
+    if (state.autoRemove) {
+      drawOrder.forEach(nm => { const m = state.members.find(x => x.name === nm); if (m) m.eligible = false; });
+    }
+    state.spinning = false;
+    $("skip").style.display = "none";
+    $("banner").textContent = "";
+    const ol = $("results"); ol.innerHTML = "";
+    drawOrder.forEach(nm => { const li = document.createElement("li"); li.textContent = nm; ol.appendChild(li); });
+    $("overlay").classList.remove("hidden");
+    render();
+  })();
+}
+async function copyRoster(btn) {
+  const text = state.members.map(m => m.name).join("\n");
+  try { await navigator.clipboard.writeText(text); } catch { window.prompt("複製名單：", text); }
+  const old = btn.textContent; btn.textContent = "已複製 ✓"; setTimeout(() => btn.textContent = old, 1200);
+}
+{
+  const addInput = $("addName");
+  const add = () => { const { added } = dedupAdd(addInput.value); addInput.value = ""; if (added) render(); addInput.focus(); };
+  $("addBtn").onclick = add;
+  addInput.addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+  $("bulkBtn").onclick = () => {
+    const { added, skipped } = dedupAdd($("bulk").value);
+    $("bulk").value = "";
+    $("bulkMsg").textContent = `已匯入 ${added} 人${skipped ? `，略過重複 ${skipped} 人` : ""}`;
+    render();
+  };
+  $("checkAll").onclick = () => { state.members.forEach(m => m.eligible = true); render(); };
+  $("copy").onclick = e => copyRoster(e.target);
+  $("autoRemove").onchange = e => { state.autoRemove = e.target.checked; };
+  $("skip").onclick = () => { if (skipToken) skipToken.skipped = true; };
+  $("spin").onclick = startSpin;
+  $("orderAll").onclick = () => { state.count = eligibleNames().length; render(); };
+  $("minus").onclick = () => { state.count = Math.max(1, state.count - 1); render(); };
+  $("plus").onclick = () => { state.count = Math.min(eligibleNames().length, state.count + 1); render(); };
+  $("gear").onclick = () => $("drawer").classList.add("open");
+  $("closeDrawer").onclick = () => $("drawer").classList.remove("open");
+  $("closeOverlay").onclick = () => $("overlay").classList.add("hidden");
+}
+
+/* ---------- theme switcher ---------- */
+const keys = Object.keys(themes);
+let current = new URLSearchParams(location.search).get("variant");
+if (!keys.includes(current)) current = "P0";
+function show(key) {
+  current = key;
+  document.body.dataset.theme = key;
+  wheel.setTheme(themes[key]);
+  $("paletteName").textContent = `${key} · ${themes[key].name}`;
+  $("paletteIntent").textContent = themes[key].intent;
+  const swatches = $("swatches"); swatches.innerHTML = "";
+  themes[key].palette.forEach(hex => {
+    const swatch = document.createElement("span");
+    swatch.style.background = hex;
+    swatch.title = hex.toUpperCase();
+    swatches.appendChild(swatch);
+  });
+  document.getElementById("swLbl").textContent = `${key} — ${themes[key].name}`;
+  const url = new URL(location); url.searchParams.set("variant", key);
+  history.replaceState(null, "", url);
+  render();
+}
+const cycle = dir => {
+  if (state.spinning) return;
+  show(keys[(keys.indexOf(current) + dir + keys.length) % keys.length]);
+};
+document.getElementById("swPrev").onclick = () => cycle(-1);
+document.getElementById("swNext").onclick = () => cycle(1);
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input, textarea, [contenteditable]")) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+show(current);
+</script>
+</body>
+</html>
