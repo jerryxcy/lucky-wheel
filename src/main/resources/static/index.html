@@ -26,6 +26,10 @@
                 <label for="count-select">抽出人數</label>
                 <select id="count-select"></select>
                 <button type="button" id="order-everyone-button" class="ghost-button">全員排序</button>
+                <label id="auto-remove-label" class="toggle-label" for="auto-remove-toggle">
+                    <input type="checkbox" id="auto-remove-toggle">
+                    抽中後自動取消資格
+                </label>
             </div>
             <button type="button" id="spin-button" class="spin-button">SPIN</button>
             <button type="button" id="skip-button" class="ghost-button" hidden>跳過</button>
@@ -58,6 +62,7 @@
         <p id="empty-roster-notice" class="notice" hidden>名單目前是空的，請先新增成員。</p>
 
         <div id="roster-tools">
+            <button type="button" id="recheck-all-button" class="ghost-button" aria-label="重新勾選所有成員為可抽選 (Re-check all as eligible)">全部重新勾選</button>
             <button type="button" id="copy-roster-button" class="ghost-button">複製名單</button>
         </div>
 
