@@ -1,0 +1,222 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Question: how should the language toggle look so it
+  blends into the dark stage (P0 palette), instead of the plain "EN / 中"?
+  Three structurally-different toggle designs on the real top bar, switchable
+  via ?variant=A|B|C and the floating bottom bar. Clicking a toggle actually
+  flips a few sample strings so the interaction is judgeable.
+  Reproduces the real top bar CSS; the wheel/bottom bar are suggestive only.
+  Not production. Do not promote.
+-->
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lang toggle — UI prototype</title>
+<style>
+  :root {
+    --bg-outer: #14172b; --bg-inner: #2a2f4a;
+    --text: #f0f1f7; --text-dim: #aab;
+    --accent: #ffd166; --accent-ink: #14172b; --border: #556;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    color: var(--text);
+    background: radial-gradient(circle at 50% 35%, var(--bg-inner) 0%, var(--bg-outer) 70%) fixed;
+    min-height: 100vh;
+  }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ---- real top bar (copied from style.css) ---- */
+  #top-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 1rem 1.4rem; z-index: 3;
+  }
+  #top-bar h1 { font-size: 1rem; letter-spacing: 0.2em; color: var(--text-dim); font-weight: 500; }
+  #top-bar-controls { display: flex; align-items: center; gap: 0.6rem; }
+  #drawer-toggle {
+    border: 1px solid var(--border); background: rgba(255,255,255,0.06);
+    color: #dde; border-radius: 8px; padding: 0.5rem 0.9rem; font-size: 0.9rem;
+  }
+
+  /* ---- suggestive stage (not the focus) ---- */
+  .stage-hint {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 1.5rem; padding: 5rem 1rem;
+  }
+  .tagline { color: var(--text-dim); font-size: 0.95rem; letter-spacing: .05em; }
+  .wheel-ghost {
+    width: 300px; height: 300px; border-radius: 50%;
+    background: conic-gradient(#ffd166 0 45deg,#ef476f 0 90deg,#06d6a0 0 135deg,#118ab2 0 180deg,#f78c6b 0 225deg,#7b61a8 0 270deg,#ffd166 0 315deg,#ef476f 0 360deg);
+    opacity: .9; box-shadow: 0 18px 40px rgba(0,0,0,.35); position: relative;
+  }
+  .wheel-ghost::after {
+    content: ""; position: absolute; inset: 42%; border-radius: 50%;
+    background: #f0f1f7; box-shadow: 0 0 0 3px var(--accent);
+  }
+  .sample-btn {
+    padding: 0.55rem 1.2rem; border: 1px solid var(--border); border-radius: 24px;
+    background: transparent; color: #dde; font-size: 0.9rem;
+  }
+
+  /* =====================================================================
+     VARIANT A — Segmented pill  (EN | 中, active cell filled gold)
+     ===================================================================== */
+  #vA-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: rgba(255,255,255,0.06); }
+  #vA-toggle button { border: 0; background: none; color: var(--text-dim); font-size: 0.85rem; font-weight: 700; padding: 0.42rem 0.7rem; transition: background .12s, color .12s; }
+  #vA-toggle button.active { background: var(--accent); color: var(--accent-ink); }
+  #vA-toggle button:not(.active):hover { color: var(--text); }
+
+  /* =====================================================================
+     VARIANT B — Globe icon → dropdown menu
+     ===================================================================== */
+  #vB-wrap { position: relative; }
+  #vB-btn {
+    border: 1px solid var(--border); background: rgba(255,255,255,0.06); color: #dde;
+    border-radius: 8px; padding: 0.5rem 0.7rem; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 0.35rem;
+  }
+  #vB-btn .chev { font-size: 0.65rem; color: var(--text-dim); }
+  #vB-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; min-width: 150px;
+    background: #1b1f38; border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.45); padding: 0.35rem; z-index: 5;
+  }
+  #vB-menu[hidden] { display: none; }
+  #vB-menu button {
+    display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 0.6rem;
+    border: 0; background: none; color: var(--text); font-size: 0.9rem; text-align: left;
+    padding: 0.5rem 0.6rem; border-radius: 7px;
+  }
+  #vB-menu button:hover { background: rgba(255,255,255,0.06); }
+  #vB-menu button.active { color: var(--accent); }
+  #vB-menu button .tick { color: var(--accent); font-size: 0.85rem; opacity: 0; }
+  #vB-menu button.active .tick { opacity: 1; }
+
+  /* =====================================================================
+     VARIANT C — Ambient text link (shows the OTHER language, one tap flips)
+     ===================================================================== */
+  #vC-btn {
+    border: 0; background: none; color: var(--accent);
+    font-size: 0.9rem; font-weight: 600; letter-spacing: .03em;
+    padding: 0.5rem 0.4rem; border-bottom: 1px solid transparent;
+  }
+  #vC-btn:hover { border-bottom-color: var(--accent); }
+  #vC-btn .globe { opacity: .8; margin-right: .25rem; }
+
+  .lang-slot { display: none; }
+  .lang-slot.on { display: inline-flex; }
+
+  /* ---- floating switcher (prototype chrome) ---- */
+  #switcher {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px; background: #111; color: #fff;
+    border-radius: 24px; padding: 8px 14px; font-size: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.4); z-index: 99; opacity: .94;
+  }
+  #switcher button { background: #333; color: #fff; border: 0; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; }
+  #switcher .lbl { min-width: 150px; text-align: center; }
+  #switcher .tag { color: #f66; font-size: 10px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+  <header id="top-bar">
+    <h1>LUCKY WHEEL</h1>
+    <div id="top-bar-controls">
+      <!-- Variant A: segmented pill -->
+      <div class="lang-slot" data-slot="A">
+        <div id="vA-toggle" role="group" aria-label="Language / 語言">
+          <button type="button" data-lang="en">EN</button>
+          <button type="button" data-lang="zh-Hant">中</button>
+        </div>
+      </div>
+      <!-- Variant B: globe menu -->
+      <div class="lang-slot" data-slot="B">
+        <div id="vB-wrap">
+          <button type="button" id="vB-btn" aria-haspopup="true" aria-expanded="false">
+            <span>🌐</span><span id="vB-current">中文</span><span class="chev">▾</span>
+          </button>
+          <div id="vB-menu" hidden role="menu">
+            <button type="button" data-lang="en" role="menuitem">English <span class="tick">✓</span></button>
+            <button type="button" data-lang="zh-Hant" role="menuitem">繁體中文 <span class="tick">✓</span></button>
+          </div>
+        </div>
+      </div>
+      <!-- Variant C: ambient text link -->
+      <div class="lang-slot" data-slot="C">
+        <button type="button" id="vC-btn"><span class="globe" aria-hidden="true">🌐</span><span id="vC-label">EN</span></button>
+      </div>
+
+      <button type="button" id="drawer-toggle" data-t="drawerToggle">⚙ 名單</button>
+    </div>
+  </header>
+
+  <div class="stage-hint">
+    <p class="tagline" data-t="tagline">團隊抽籤決策工具</p>
+    <div class="wheel-ghost" aria-hidden="true"></div>
+    <button class="sample-btn" data-t="orderEveryone">全員排序</button>
+  </div>
+
+  <div id="switcher">
+    <button id="swPrev">←</button>
+    <div class="lbl"><span class="tag">PROTOTYPE</span><br><span id="swLbl"></span></div>
+    <button id="swNext">→</button>
+  </div>
+
+<script>
+"use strict";
+// Sample strings so the toggle's effect is visible.
+const STR = {
+  en:        { drawerToggle: "⚙ Roster", tagline: "Team decision spinner", orderEveryone: "Order everyone" },
+  "zh-Hant": { drawerToggle: "⚙ 名單",   tagline: "團隊抽籤決策工具",     orderEveryone: "全員排序" },
+};
+let lang = "zh-Hant";
+
+function applyLang() {
+  document.querySelectorAll("[data-t]").forEach(el => { el.textContent = STR[lang][el.dataset.t]; });
+  document.documentElement.lang = lang;
+  // A — segmented
+  document.querySelectorAll("#vA-toggle button").forEach(b => b.classList.toggle("active", b.dataset.lang === lang));
+  // B — globe menu
+  document.getElementById("vB-current").textContent = lang === "en" ? "English" : "中文";
+  document.querySelectorAll("#vB-menu button").forEach(b => b.classList.toggle("active", b.dataset.lang === lang));
+  // C — ambient link shows the OTHER language
+  document.getElementById("vC-label").textContent = lang === "en" ? "中" : "EN";
+}
+function setLang(l) { lang = l; applyLang(); }
+
+// A
+document.querySelectorAll("#vA-toggle button").forEach(b => b.onclick = () => setLang(b.dataset.lang));
+// B
+const vbBtn = document.getElementById("vB-btn"), vbMenu = document.getElementById("vB-menu");
+vbBtn.onclick = e => { e.stopPropagation(); const open = vbMenu.hidden; vbMenu.hidden = !open; vbBtn.setAttribute("aria-expanded", String(open)); };
+document.querySelectorAll("#vB-menu button").forEach(b => b.onclick = () => { setLang(b.dataset.lang); vbMenu.hidden = true; vbBtn.setAttribute("aria-expanded","false"); });
+document.addEventListener("click", () => { vbMenu.hidden = true; vbBtn.setAttribute("aria-expanded","false"); });
+// C
+document.getElementById("vC-btn").onclick = () => setLang(lang === "en" ? "zh-Hant" : "en");
+
+// ---- switcher ----
+const variants = { A: "Segmented pill 分段膠囊", B: "Globe menu 地球選單", C: "Ambient link 文字連結" };
+const keys = Object.keys(variants);
+let cur = new URLSearchParams(location.search).get("variant");
+if (!keys.includes(cur)) cur = "A";
+function show(k) {
+  cur = k;
+  document.querySelectorAll(".lang-slot").forEach(s => s.classList.toggle("on", s.dataset.slot === k));
+  document.getElementById("swLbl").textContent = `${k} — ${variants[k]}`;
+  const u = new URL(location); u.searchParams.set("variant", k); history.replaceState(null, "", u);
+}
+const cycle = d => show(keys[(keys.indexOf(cur) + d + keys.length) % keys.length]);
+document.getElementById("swPrev").onclick = () => cycle(-1);
+document.getElementById("swNext").onclick = () => cycle(1);
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input,textarea,[contenteditable]")) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+applyLang();
+show(cur);
+</script>
+</body>
+</html>
