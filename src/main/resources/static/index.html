@@ -11,10 +11,16 @@
         <header id="top-bar">
             <h1>LUCKY WHEEL</h1>
             <div id="top-bar-controls">
-                <div id="language-toggle" role="group" aria-label="Language / 語言">
-                    <button type="button" class="lang-option" data-lang="en">EN</button>
-                    <span class="lang-sep" aria-hidden="true">/</span>
-                    <button type="button" class="lang-option" data-lang="zh-Hant">中</button>
+                <div id="language-toggle">
+                    <button type="button" id="language-menu-button" aria-haspopup="true" aria-expanded="false" aria-controls="language-menu" aria-label="Language / 語言">
+                        <span aria-hidden="true">🌐</span>
+                        <span id="language-current"></span>
+                        <span class="lang-chevron" aria-hidden="true">▾</span>
+                    </button>
+                    <div id="language-menu" role="menu" aria-label="Language / 語言" hidden>
+                        <button type="button" class="lang-option" data-lang="en" role="menuitemradio" aria-checked="false">English <span class="lang-tick" aria-hidden="true">✓</span></button>
+                        <button type="button" class="lang-option" data-lang="zh-Hant" role="menuitemradio" aria-checked="false">繁體中文 <span class="lang-tick" aria-hidden="true">✓</span></button>
+                    </div>
                 </div>
                 <button type="button" id="drawer-toggle" aria-expanded="false" aria-controls="roster-drawer" data-i18n="drawerToggle">⚙ 名單</button>
             </div>

@@ -118,6 +118,9 @@ const STRINGS = {
 
 const DEFAULT_LANGUAGE = "en";
 
+/** Each language's own name (endonym), shown on the toggle button. */
+const LANGUAGE_LABEL = { en: "English", "zh-Hant": "中文" };
+
 /** Current UI language ("en" | "zh-Hant"), set by applyLanguage(). */
 let currentLanguage = DEFAULT_LANGUAGE;
 
@@ -194,10 +197,11 @@ function applyLanguage(lang) {
     translateStaticDom();
     document.title = t("appTitle");
 
+    languageCurrentLabel.textContent = LANGUAGE_LABEL[lang];
     document.querySelectorAll(".lang-option").forEach((btn) => {
         const isActive = btn.dataset.lang === lang;
         btn.classList.toggle("active", isActive);
-        btn.setAttribute("aria-pressed", String(isActive));
+        btn.setAttribute("aria-checked", String(isActive));
     });
 
     if (copyRosterFlashActive) {
@@ -235,6 +239,10 @@ let spinning = false;
 let activeSkipToken = null;
 
 // ---- DOM references ----
+const languageMenuButton = document.getElementById("language-menu-button");
+const languageMenu = document.getElementById("language-menu");
+const languageCurrentLabel = document.getElementById("language-current");
+
 const drawerToggle = document.getElementById("drawer-toggle");
 const drawerClose = document.getElementById("drawer-close");
 const drawerBackdrop = document.getElementById("drawer-backdrop");
@@ -919,10 +927,37 @@ async function spin() {
 
 // ---- Event wiring ----
 
+function openLanguageMenu() {
+    languageMenu.hidden = false;
+    languageMenuButton.setAttribute("aria-expanded", "true");
+}
+
+function closeLanguageMenu() {
+    languageMenu.hidden = true;
+    languageMenuButton.setAttribute("aria-expanded", "false");
+}
+
+languageMenuButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (languageMenu.hidden) openLanguageMenu();
+    else closeLanguageMenu();
+});
+
 document.querySelectorAll(".lang-option").forEach((btn) => {
     btn.addEventListener("click", () => {
         if (btn.dataset.lang !== currentLanguage) applyLanguage(btn.dataset.lang);
+        closeLanguageMenu();
+        languageMenuButton.focus();
     });
+});
+
+// Close the menu on an outside click or Escape.
+document.addEventListener("click", () => closeLanguageMenu());
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !languageMenu.hidden) {
+        closeLanguageMenu();
+        languageMenuButton.focus();
+    }
 });
 
 drawerToggle.addEventListener("click", openDrawer);
