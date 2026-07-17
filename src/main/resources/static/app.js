@@ -2,9 +2,9 @@
 
 /**
  * Walking-skeleton UI: roster -> spin -> draw order.
- * No wheel animation here (that's ticket #5) — the draw order is rendered
- * as a plain ordered list by renderDrawOrder(), kept as a single
- * replaceable function so #5 can swap it for a reveal animation.
+ * No wheel animation yet — the draw order is rendered as a plain ordered
+ * list by renderDrawOrder(), kept as a single replaceable function so a
+ * future reveal animation can swap it out without touching the rest.
  */
 
 const STORAGE_KEY = "luckyWheel.roster";
@@ -198,8 +198,8 @@ function renderSpinAvailability() {
 
 /**
  * Renders the draw order returned by the server as a plain ordered list.
- * Kept as a single, replaceable function: ticket #5 swaps this out for a
- * wheel reveal animation without touching the rest of the app.
+ * Kept as a single, replaceable function: a wheel reveal animation can
+ * swap this out without touching the rest of the app.
  * @param {string[]} drawOrder
  */
 function renderDrawOrder(drawOrder) {
@@ -227,12 +227,18 @@ async function spin() {
             body: JSON.stringify({ members, count }),
         });
 
-        const body = await response.json();
         if (!response.ok) {
-            showSpinError(body.message || "抽籤失敗，請再試一次。");
+            // The documented 400 contract carries {"message": ...}, but a
+            // non-JSON body (unexpected 5xx, proxy error page) must not be
+            // misreported as a connectivity failure.
+            const message = await response
+                .json()
+                .then((body) => body.message)
+                .catch(() => null);
+            showSpinError(message || "抽籤失敗，請再試一次。");
             return;
         }
-        renderDrawOrder(body.drawOrder);
+        renderDrawOrder((await response.json()).drawOrder);
     } catch (error) {
         console.error("Spin request failed:", error);
         showSpinError("無法連線到伺服器，請確認伺服器是否啟動後再試一次。");
