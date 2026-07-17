@@ -40,6 +40,13 @@ const addMemberNotice = document.getElementById("add-member-notice");
 const memberList = document.getElementById("member-list");
 const emptyRosterNotice = document.getElementById("empty-roster-notice");
 
+const copyRosterButton = document.getElementById("copy-roster-button");
+const copyRosterButtonDefaultLabel = copyRosterButton.textContent;
+
+const bulkImportTextarea = document.getElementById("bulk-import-textarea");
+const bulkImportButton = document.getElementById("bulk-import-button");
+const bulkImportNotice = document.getElementById("bulk-import-notice");
+
 const countSelect = document.getElementById("count-select");
 const orderEveryoneButton = document.getElementById("order-everyone-button");
 const spinButton = document.getElementById("spin-button");
@@ -125,6 +132,77 @@ function eligibleMembers() {
     return roster.filter((member) => member.eligible);
 }
 
+/**
+ * Splits pasted text into individual names. Names may be separated by
+ * newlines, commas (ASCII or Chinese full-width "，"), the Chinese
+ * enumeration comma "、", or semicolons (ASCII or Chinese "；"). Blank
+ * entries (from consecutive separators or stray whitespace) are dropped.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function splitPastedNames(text) {
+    return text
+        .split(/[\n,，、;；]+/)
+        .map((name) => normalizeName(name))
+        .filter((name) => name !== "");
+}
+
+/**
+ * Imports every name parsed out of `rawText` into the roster (eligible by
+ * default), skipping names already on the roster and duplicates within the
+ * pasted text itself. Reports how many were added vs. skipped.
+ */
+function importBulk(rawText) {
+    if (spinning) return;
+    const names = splitPastedNames(rawText);
+    if (names.length === 0) {
+        showBulkImportNotice("請先貼上姓名。");
+        return;
+    }
+
+    let added = 0;
+    let skipped = 0;
+    for (const name of names) {
+        if (isDuplicateName(name)) {
+            skipped++;
+            continue;
+        }
+        roster.push({ name, eligible: true });
+        added++;
+    }
+
+    saveRoster();
+    bulkImportTextarea.value = "";
+    render();
+    showBulkImportNotice(`已匯入 ${added} 人，略過重複 ${skipped} 人。`);
+}
+
+/**
+ * Copies the roster (member names, one per line) to the clipboard. Falls
+ * back to window.prompt when the Clipboard API is unavailable or denied,
+ * so the text is still reachable via manual copy.
+ */
+async function copyRoster() {
+    const text = roster.map((member) => member.name).join("\n");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            flashCopyRosterConfirmation();
+            return;
+        } catch (error) {
+            console.error("Clipboard write failed, falling back to prompt:", error);
+        }
+    }
+    window.prompt("複製以下名單：", text);
+}
+
+function flashCopyRosterConfirmation() {
+    copyRosterButton.textContent = "已複製 ✓";
+    setTimeout(() => {
+        copyRosterButton.textContent = copyRosterButtonDefaultLabel;
+    }, 1200);
+}
+
 // ---- Notices ----
 
 function showAddMemberNotice(message) {
@@ -135,6 +213,16 @@ function showAddMemberNotice(message) {
 function hideAddMemberNotice() {
     addMemberNotice.hidden = true;
     addMemberNotice.textContent = "";
+}
+
+function showBulkImportNotice(message) {
+    bulkImportNotice.textContent = message;
+    bulkImportNotice.hidden = false;
+}
+
+function hideBulkImportNotice() {
+    bulkImportNotice.hidden = true;
+    bulkImportNotice.textContent = "";
 }
 
 function showSpinError(message) {
@@ -337,9 +425,15 @@ function render() {
     renderMemberList();
     renderCountOptions();
     renderSpinAvailability();
+    renderRosterToolsAvailability();
     if (!spinning) {
         wheel.setNames(eligibleMembers().map((member) => member.name));
     }
+}
+
+function renderRosterToolsAvailability() {
+    bulkImportTextarea.disabled = spinning;
+    bulkImportButton.disabled = spinning;
 }
 
 function renderMemberList() {
@@ -556,6 +650,14 @@ memberNameInput.addEventListener("keydown", (event) => {
 });
 
 memberNameInput.addEventListener("input", hideAddMemberNotice);
+
+copyRosterButton.addEventListener("click", copyRoster);
+
+bulkImportButton.addEventListener("click", () => {
+    importBulk(bulkImportTextarea.value);
+});
+
+bulkImportTextarea.addEventListener("input", hideBulkImportNotice);
 
 orderEveryoneButton.addEventListener("click", () => {
     const eligibleCount = eligibleMembers().length;

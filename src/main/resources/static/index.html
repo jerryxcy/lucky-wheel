@@ -56,6 +56,22 @@
 
         <ul id="member-list"></ul>
         <p id="empty-roster-notice" class="notice" hidden>名單目前是空的，請先新增成員。</p>
+
+        <div id="roster-tools">
+            <button type="button" id="copy-roster-button" class="ghost-button">複製名單</button>
+        </div>
+
+        <div id="bulk-import">
+            <h3>批次匯入</h3>
+            <label for="bulk-import-textarea" class="visually-hidden">批次貼上姓名</label>
+            <textarea
+                id="bulk-import-textarea"
+                rows="4"
+                placeholder="貼上多行，或以逗號、頓號、分號分隔的姓名"
+            ></textarea>
+            <button type="button" id="bulk-import-button">匯入名單</button>
+            <p id="bulk-import-notice" class="notice" role="alert" hidden></p>
+        </div>
     </aside>
 
     <div id="result-overlay" hidden>
