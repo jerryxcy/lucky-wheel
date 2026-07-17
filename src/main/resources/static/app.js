@@ -80,7 +80,7 @@ const STRINGS = {
         drawerToggle: "⚙ 名單",
         countLabel: "抽出人數",
         orderEveryone: "全員排序",
-        autoRemoveLabel: "中籤者不參加下一輪抽選",
+        autoRemoveLabel: "中籤者不參加之後抽選",
         spinButton: "SPIN",
         skipButton: "跳過",
         rosterHeading: "名單 Roster",
