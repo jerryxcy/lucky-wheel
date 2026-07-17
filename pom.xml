@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>io.github.jerryxcy</groupId>
 	<artifactId>lucky-wheel</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>1.0.0</version>
 	<name>Lucky Wheel</name>
 	<description>Stateless spin-wheel decision tool</description>
 	<url>https://github.com/jerryxcy/lucky-wheel</url>
