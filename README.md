@@ -21,7 +21,21 @@ in the stand-up.
 
 ## Quick start
 
-Requires **Java 21**. From the repo root:
+Requires **Java 21**. Either grab the pre-built jar or build from source.
+
+**Download the released jar** (no build tools needed):
+
+```bash
+# with the GitHub CLI
+gh release download v1.0.0 --repo jerryxcy/lucky-wheel --pattern '*.jar'
+
+# …or with curl
+curl -LO https://github.com/jerryxcy/lucky-wheel/releases/download/v1.0.0/lucky-wheel-1.0.0.jar
+
+java -jar lucky-wheel-1.0.0.jar
+```
+
+**Or build from source** (from the repo root):
 
 ```bash
 ./mvnw package
