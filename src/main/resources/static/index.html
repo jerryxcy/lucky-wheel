@@ -3,14 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lucky Wheel 抽籤轉盤</title>
+    <title data-i18n="appTitle">Lucky Wheel 抽籤轉盤</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="stage">
         <header id="top-bar">
             <h1>LUCKY WHEEL</h1>
-            <button type="button" id="drawer-toggle" aria-expanded="false" aria-controls="roster-drawer">⚙ 名單</button>
+            <div id="top-bar-controls">
+                <div id="language-toggle" role="group" aria-label="Language / 語言">
+                    <button type="button" class="lang-option" data-lang="en">EN</button>
+                    <span class="lang-sep" aria-hidden="true">/</span>
+                    <button type="button" class="lang-option" data-lang="zh-Hant">中</button>
+                </div>
+                <button type="button" id="drawer-toggle" aria-expanded="false" aria-controls="roster-drawer" data-i18n="drawerToggle">⚙ 名單</button>
+            </div>
         </header>
 
         <div id="wheel-area">
@@ -23,16 +30,16 @@
 
         <div id="bottom-bar">
             <div id="spin-controls">
-                <label for="count-select">抽出人數</label>
+                <label for="count-select" data-i18n="countLabel">抽出人數</label>
                 <select id="count-select"></select>
-                <button type="button" id="order-everyone-button" class="ghost-button">全員排序</button>
+                <button type="button" id="order-everyone-button" class="ghost-button" data-i18n="orderEveryone">全員排序</button>
                 <label id="auto-remove-label" class="toggle-label" for="auto-remove-toggle">
                     <input type="checkbox" id="auto-remove-toggle">
-                    抽中後自動取消資格
+                    <span data-i18n="autoRemoveLabel">抽中後自動取消資格</span>
                 </label>
             </div>
-            <button type="button" id="spin-button" class="spin-button">SPIN</button>
-            <button type="button" id="skip-button" class="ghost-button" hidden>跳過</button>
+            <button type="button" id="spin-button" class="spin-button" data-i18n="spinButton">SPIN</button>
+            <button type="button" id="skip-button" class="ghost-button" hidden data-i18n="skipButton">跳過</button>
         </div>
         <p id="spin-disabled-reason" class="notice" hidden></p>
         <p id="spin-error" class="notice" role="alert" hidden></p>
@@ -41,48 +48,50 @@
     <div id="drawer-backdrop" hidden></div>
     <aside id="roster-drawer" aria-labelledby="roster-heading">
         <div id="drawer-head">
-            <h2 id="roster-heading">名單 Roster</h2>
-            <button type="button" id="drawer-close" aria-label="關閉名單">關閉</button>
+            <h2 id="roster-heading" data-i18n="rosterHeading">名單 Roster</h2>
+            <button type="button" id="drawer-close" data-i18n="close" data-i18n-aria-label="drawerCloseAria" aria-label="關閉名單">關閉</button>
         </div>
 
         <form id="add-member-form">
-            <label for="member-name-input" class="visually-hidden">成員姓名</label>
+            <label for="member-name-input" class="visually-hidden" data-i18n="memberNameLabel">成員姓名</label>
             <input
                 type="text"
                 id="member-name-input"
                 name="memberName"
+                data-i18n-placeholder="memberNamePlaceholder"
                 placeholder="輸入姓名後按 Enter 或「新增」"
                 autocomplete="off"
             >
-            <button type="submit">新增</button>
+            <button type="submit" data-i18n="addMemberButton">新增</button>
         </form>
         <p id="add-member-notice" class="notice" role="alert" hidden></p>
 
         <ul id="member-list"></ul>
-        <p id="empty-roster-notice" class="notice" hidden>名單目前是空的，請先新增成員。</p>
+        <p id="empty-roster-notice" class="notice" hidden data-i18n="emptyRosterNotice">名單目前是空的，請先新增成員。</p>
 
         <div id="roster-tools">
-            <button type="button" id="recheck-all-button" class="ghost-button" aria-label="重新勾選所有成員為可抽選 (Re-check all as eligible)">全部重新勾選</button>
-            <button type="button" id="copy-roster-button" class="ghost-button">複製名單</button>
+            <button type="button" id="recheck-all-button" class="ghost-button" data-i18n="recheckAllButton" data-i18n-aria-label="recheckAllAria" aria-label="重新勾選所有成員為可抽選 (Re-check all as eligible)">全部重新勾選</button>
+            <button type="button" id="copy-roster-button" class="ghost-button" data-i18n="copyRosterButton">複製名單</button>
         </div>
 
         <div id="bulk-import">
-            <h3>批次匯入</h3>
-            <label for="bulk-import-textarea" class="visually-hidden">批次貼上姓名</label>
+            <h3 data-i18n="bulkImportHeading">批次匯入</h3>
+            <label for="bulk-import-textarea" class="visually-hidden" data-i18n="bulkImportLabel">批次貼上姓名</label>
             <textarea
                 id="bulk-import-textarea"
                 rows="4"
+                data-i18n-placeholder="bulkImportPlaceholder"
                 placeholder="貼上多行，或以逗號、頓號、分號分隔的姓名"
             ></textarea>
-            <button type="button" id="bulk-import-button">匯入名單</button>
+            <button type="button" id="bulk-import-button" data-i18n="bulkImportButton">匯入名單</button>
             <p id="bulk-import-notice" class="notice" role="alert" hidden></p>
         </div>
     </aside>
 
     <div id="result-overlay" hidden>
-        <h2>抽籤結果 Draw order</h2>
+        <h2 data-i18n="drawOrderHeading">抽籤結果 Draw order</h2>
         <ol id="draw-order-list"></ol>
-        <button type="button" id="close-overlay-button">關閉</button>
+        <button type="button" id="close-overlay-button" data-i18n="close">關閉</button>
     </div>
 
     <script src="app.js"></script>

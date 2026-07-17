@@ -14,11 +14,207 @@ const STORAGE_KEY = "luckyWheel.roster";
 // Sibling key: the auto-remove toggle is a roster-wide setting, not a
 // per-member one, so it gets its own localStorage entry.
 const AUTO_REMOVE_STORAGE_KEY = "luckyWheel.autoRemove";
+// Sibling key: the chosen UI language. An explicit choice here always beats
+// navigator.language detection (see detectInitialLanguage).
+const LANGUAGE_STORAGE_KEY = "luckyWheel.language";
 // P0 "Original" palette from the prototype verdict on issue #1: six segment
 // colours, with per-segment light/dark labels picked for contrast.
 const WHEEL_PALETTE = ["#ffd166", "#ef476f", "#06d6a0", "#118ab2", "#f78c6b", "#7b61a8"];
 const WHEEL_LABEL_LIGHT = "#ffffff";
 const WHEEL_LABEL_DARK = "#14172b";
+
+// ---- i18n ----
+//
+// Client-side only: a JS string table keyed by id, a t(key, params) lookup,
+// and data-i18n[-attr] slots in the HTML filled on render. See ADR-0002 for
+// why this replaces Spring MessageSource / a fetched JSON file. Member
+// names are user data and never pass through this table.
+
+/**
+ * String table. Values are either a plain string or a function taking a
+ * params object and returning the interpolated string (used wherever the
+ * message embeds a runtime value, e.g. a member name or a count).
+ */
+const STRINGS = {
+    en: {
+        appTitle: "Lucky Wheel",
+        drawerToggle: "⚙ Roster",
+        countLabel: "Number to pick",
+        orderEveryone: "Order everyone",
+        autoRemoveLabel: "Auto-remove picked members",
+        spinButton: "SPIN",
+        skipButton: "Skip",
+        rosterHeading: "Roster",
+        close: "Close",
+        drawerCloseAria: "Close roster",
+        memberNameLabel: "Member name",
+        memberNamePlaceholder: "Type a name, then press Enter or “Add”",
+        addMemberButton: "Add",
+        emptyRosterNotice: "The roster is empty — add a member first.",
+        recheckAllButton: "Re-check all",
+        recheckAllAria: "Re-check all members as eligible",
+        copyRosterButton: "Copy roster",
+        bulkImportHeading: "Bulk import",
+        bulkImportLabel: "Paste names in bulk",
+        bulkImportPlaceholder: "Paste multiple lines, or names separated by commas or semicolons",
+        bulkImportButton: "Import roster",
+        drawOrderHeading: "Draw order",
+        pleaseEnterName: "Please enter a name.",
+        duplicateName: (p) => `"${p.name}" is already on the roster — names must be unique.`,
+        copiedConfirmation: "Copied ✓",
+        copyPromptLabel: "Copy the roster below:",
+        bulkImportResult: (p) => `Imported ${p.added}, skipped ${p.skipped} duplicate(s).`,
+        bulkImportEmpty: "Paste some names first.",
+        spinDisabledEmptyRoster: "The roster is empty — add a member before spinning.",
+        spinDisabledNoEligible: "No eligible members right now — check at least one.",
+        spinErrorGeneric: "Spin failed — please try again.",
+        spinErrorConnection: "Can't reach the server — check that it's running, then try again.",
+        pickBanner: (p) => `Pick ${p.index}: ${p.name}`,
+        canvasEmpty: "The roster is empty",
+        eligibleAria: (p) => `${p.name} eligible`,
+        removeAria: (p) => `Remove ${p.name}`,
+        removeButtonText: "Remove",
+    },
+    "zh-Hant": {
+        appTitle: "Lucky Wheel 抽籤轉盤",
+        drawerToggle: "⚙ 名單",
+        countLabel: "抽出人數",
+        orderEveryone: "全員排序",
+        autoRemoveLabel: "抽中後自動取消資格",
+        spinButton: "SPIN",
+        skipButton: "跳過",
+        rosterHeading: "名單 Roster",
+        close: "關閉",
+        drawerCloseAria: "關閉名單",
+        memberNameLabel: "成員姓名",
+        memberNamePlaceholder: "輸入姓名後按 Enter 或「新增」",
+        addMemberButton: "新增",
+        emptyRosterNotice: "名單目前是空的，請先新增成員。",
+        recheckAllButton: "全部重新勾選",
+        recheckAllAria: "重新勾選所有成員為可抽選 (Re-check all as eligible)",
+        copyRosterButton: "複製名單",
+        bulkImportHeading: "批次匯入",
+        bulkImportLabel: "批次貼上姓名",
+        bulkImportPlaceholder: "貼上多行，或以逗號、頓號、分號分隔的姓名",
+        bulkImportButton: "匯入名單",
+        drawOrderHeading: "抽籤結果 Draw order",
+        pleaseEnterName: "請輸入姓名。",
+        duplicateName: (p) => `「${p.name}」已經在名單中，姓名不可重複。`,
+        copiedConfirmation: "已複製 ✓",
+        copyPromptLabel: "複製以下名單：",
+        bulkImportResult: (p) => `已匯入 ${p.added} 人，略過重複 ${p.skipped} 人。`,
+        bulkImportEmpty: "請先貼上姓名。",
+        spinDisabledEmptyRoster: "名單是空的，請先新增成員才能抽籤。",
+        spinDisabledNoEligible: "目前沒有可抽選 (Eligible) 的成員，請至少勾選一位。",
+        spinErrorGeneric: "抽籤失敗，請再試一次。",
+        spinErrorConnection: "無法連線到伺服器，請確認伺服器是否啟動後再試一次。",
+        pickBanner: (p) => `第 ${p.index} 位：${p.name}`,
+        canvasEmpty: "名單是空的",
+        eligibleAria: (p) => `${p.name} 是否可抽選 (Eligible)`,
+        removeAria: (p) => `移除 ${p.name}`,
+        removeButtonText: "移除",
+    },
+};
+
+const DEFAULT_LANGUAGE = "en";
+
+/** Current UI language ("en" | "zh-Hant"), set by applyLanguage(). */
+let currentLanguage = DEFAULT_LANGUAGE;
+
+/**
+ * Looks up `key` in the current language's string table. `params` is passed
+ * through to function-valued entries for interpolation (e.g. a member name
+ * or a count) — those values are never translated themselves.
+ * @param {string} key
+ * @param {Record<string, unknown>} [params]
+ */
+function t(key, params) {
+    const table = STRINGS[currentLanguage] || STRINGS[DEFAULT_LANGUAGE];
+    const entry = table[key];
+    if (typeof entry === "function") return entry(params || {});
+    return entry;
+}
+
+function loadLanguage() {
+    try {
+        const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+        return stored === "en" || stored === "zh-Hant" ? stored : null;
+    } catch (error) {
+        console.error("Failed to load language from localStorage:", error);
+        return null;
+    }
+}
+
+function saveLanguage() {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, currentLanguage);
+}
+
+/**
+ * First visit picks the language from navigator.language (any zh* locale ->
+ * zh-Hant, otherwise English). An explicit stored choice always wins over
+ * that detection, on every later visit including a new tab.
+ */
+function detectInitialLanguage() {
+    const stored = loadLanguage();
+    if (stored) return stored;
+    const nav = (navigator.language || navigator.userLanguage || "").toLowerCase();
+    return nav.startsWith("zh") ? "zh-Hant" : "en";
+}
+
+/**
+ * Fills every data-i18n / data-i18n-placeholder / data-i18n-aria-label slot
+ * in the static HTML from the current language's string table. Runs
+ * regardless of an element's hidden state, so a notice picks up the right
+ * text whenever it's next shown.
+ */
+function translateStaticDom() {
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+        el.textContent = t(el.dataset.i18n);
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+        el.setAttribute("placeholder", t(el.dataset.i18nPlaceholder));
+    });
+    document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
+        el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel));
+    });
+}
+
+/**
+ * Switches the UI language: persists the choice, updates <html lang> and
+ * the document title, re-fills every static slot, highlights the active
+ * toggle option, and re-renders every dynamic bit of UI (roster rows, spin
+ * availability, canvas "empty" text, and whichever transient notice is
+ * currently on screen) so every visible string flips immediately.
+ * @param {string} lang
+ */
+function applyLanguage(lang) {
+    currentLanguage = lang;
+    saveLanguage();
+    document.documentElement.lang = lang;
+    translateStaticDom();
+    document.title = t("appTitle");
+
+    document.querySelectorAll(".lang-option").forEach((btn) => {
+        const isActive = btn.dataset.lang === lang;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-pressed", String(isActive));
+    });
+
+    if (copyRosterFlashActive) {
+        copyRosterButton.textContent = t("copiedConfirmation");
+    }
+    if (addMemberNoticeState) {
+        addMemberNotice.textContent = t(addMemberNoticeState.key, addMemberNoticeState.params);
+    }
+    if (bulkImportNoticeState) {
+        bulkImportNotice.textContent = t(bulkImportNoticeState.key, bulkImportNoticeState.params);
+    }
+    if (spinErrorState) {
+        spinError.textContent = t(spinErrorState.key, spinErrorState.params);
+    }
+
+    render();
+}
 
 /** @typedef {{ name: string, eligible: boolean }} Member */
 
@@ -52,7 +248,8 @@ const emptyRosterNotice = document.getElementById("empty-roster-notice");
 
 const recheckAllButton = document.getElementById("recheck-all-button");
 const copyRosterButton = document.getElementById("copy-roster-button");
-const copyRosterButtonDefaultLabel = copyRosterButton.textContent;
+/** True while "Copied ✓" is showing in place of the button's default label. */
+let copyRosterFlashActive = false;
 
 const bulkImportTextarea = document.getElementById("bulk-import-textarea");
 const bulkImportButton = document.getElementById("bulk-import-button");
@@ -124,11 +321,11 @@ function addMember(rawName) {
     if (spinning) return;
     const name = normalizeName(rawName);
     if (name === "") {
-        showAddMemberNotice("請輸入姓名。");
+        showAddMemberNotice("pleaseEnterName");
         return;
     }
     if (isDuplicateName(name)) {
-        showAddMemberNotice(`「${name}」已經在名單中，姓名不可重複。`);
+        showAddMemberNotice("duplicateName", { name });
         return;
     }
     hideAddMemberNotice();
@@ -210,7 +407,7 @@ function importBulk(rawText) {
     if (spinning) return;
     const names = splitPastedNames(rawText);
     if (names.length === 0) {
-        showBulkImportNotice("請先貼上姓名。");
+        showBulkImportNotice("bulkImportEmpty");
         return;
     }
 
@@ -228,7 +425,7 @@ function importBulk(rawText) {
     saveRoster();
     bulkImportTextarea.value = "";
     render();
-    showBulkImportNotice(`已匯入 ${added} 人，略過重複 ${skipped} 人。`);
+    showBulkImportNotice("bulkImportResult", { added, skipped });
 }
 
 /**
@@ -247,44 +444,72 @@ async function copyRoster() {
             console.error("Clipboard write failed, falling back to prompt:", error);
         }
     }
-    window.prompt("複製以下名單：", text);
+    window.prompt(t("copyPromptLabel"), text);
 }
 
 function flashCopyRosterConfirmation() {
-    copyRosterButton.textContent = "已複製 ✓";
+    copyRosterFlashActive = true;
+    copyRosterButton.textContent = t("copiedConfirmation");
     setTimeout(() => {
-        copyRosterButton.textContent = copyRosterButtonDefaultLabel;
+        copyRosterFlashActive = false;
+        copyRosterButton.textContent = t("copyRosterButton");
     }, 1200);
 }
 
 // ---- Notices ----
+//
+// Each notice tracks the last { key, params } it was shown with (or null
+// when hidden) so applyLanguage() can re-translate whichever notice is
+// currently on screen instead of leaving it frozen in the old language.
 
-function showAddMemberNotice(message) {
-    addMemberNotice.textContent = message;
+let addMemberNoticeState = null;
+let bulkImportNoticeState = null;
+let spinErrorState = null;
+
+function showAddMemberNotice(key, params) {
+    addMemberNoticeState = { key, params };
+    addMemberNotice.textContent = t(key, params);
     addMemberNotice.hidden = false;
 }
 
 function hideAddMemberNotice() {
+    addMemberNoticeState = null;
     addMemberNotice.hidden = true;
     addMemberNotice.textContent = "";
 }
 
-function showBulkImportNotice(message) {
-    bulkImportNotice.textContent = message;
+function showBulkImportNotice(key, params) {
+    bulkImportNoticeState = { key, params };
+    bulkImportNotice.textContent = t(key, params);
     bulkImportNotice.hidden = false;
 }
 
 function hideBulkImportNotice() {
+    bulkImportNoticeState = null;
     bulkImportNotice.hidden = true;
     bulkImportNotice.textContent = "";
 }
 
-function showSpinError(message) {
+function showSpinError(key, params) {
+    spinErrorState = { key, params };
+    spinError.textContent = t(key, params);
+    spinError.hidden = false;
+}
+
+/**
+ * Shows a server-supplied error message verbatim. Server error messages are
+ * English-only by design (out of scope for this feature — see ADR-0002), so
+ * unlike showSpinError() this does not track state for re-translation: the
+ * text stays exactly as received even if the UI language is later switched.
+ */
+function showSpinErrorLiteral(message) {
+    spinErrorState = null;
     spinError.textContent = message;
     spinError.hidden = false;
 }
 
 function hideSpinError() {
+    spinErrorState = null;
     spinError.hidden = true;
     spinError.textContent = "";
 }
@@ -355,7 +580,7 @@ class Wheel {
             ctx.fillStyle = WHEEL_LABEL_LIGHT;
             ctx.font = "15px sans-serif";
             ctx.textAlign = "center";
-            ctx.fillText("名單是空的", cx, cy);
+            ctx.fillText(t("canvasEmpty"), cx, cy);
             return;
         }
 
@@ -504,7 +729,7 @@ function renderMemberList() {
         checkbox.type = "checkbox";
         checkbox.checked = member.eligible;
         checkbox.disabled = spinning;
-        checkbox.setAttribute("aria-label", `${member.name} 是否可抽選 (Eligible)`);
+        checkbox.setAttribute("aria-label", t("eligibleAria", { name: member.name }));
         checkbox.addEventListener("change", () => setEligible(member.name, checkbox.checked));
 
         const nameSpan = document.createElement("span");
@@ -513,9 +738,9 @@ function renderMemberList() {
 
         const removeButton = document.createElement("button");
         removeButton.type = "button";
-        removeButton.textContent = "移除";
+        removeButton.textContent = t("removeButtonText");
         removeButton.disabled = spinning;
-        removeButton.setAttribute("aria-label", `移除 ${member.name}`);
+        removeButton.setAttribute("aria-label", t("removeAria", { name: member.name }));
         removeButton.addEventListener("click", () => removeMember(member.name));
 
         item.append(checkbox, nameSpan, removeButton);
@@ -550,9 +775,9 @@ function renderSpinAvailability() {
     const eligibleCount = eligibleMembers().length;
     let reason = null;
     if (roster.length === 0) {
-        reason = "名單是空的，請先新增成員才能抽籤。";
+        reason = t("spinDisabledEmptyRoster");
     } else if (eligibleCount === 0) {
-        reason = "目前沒有可抽選 (Eligible) 的成員，請至少勾選一位。";
+        reason = t("spinDisabledNoEligible");
     }
 
     spinButton.disabled = spinning || reason !== null;
@@ -609,7 +834,7 @@ async function playReveal(drawOrder, poolNames, skipToken) {
         await wheel.spinTo(remaining.indexOf(name), i === 0 ? 2200 : 1400, skipToken);
         if (skipToken.skipped) break;
 
-        pickBanner.textContent = `第 ${i + 1} 位：${name}`;
+        pickBanner.textContent = t("pickBanner", { index: i + 1, name });
         remaining = remaining.filter((candidate) => candidate !== name);
         await sleep(650, skipToken);
     }
@@ -655,14 +880,18 @@ async function spin() {
                 .json()
                 .then((body) => body.message)
                 .catch(() => null);
-            showSpinError(message || "抽籤失敗，請再試一次。");
+            if (message) {
+                showSpinErrorLiteral(message);
+            } else {
+                showSpinError("spinErrorGeneric");
+            }
             setSpinning(false);
             return;
         }
         drawOrder = (await response.json()).drawOrder;
     } catch (error) {
         console.error("Spin request failed:", error);
-        showSpinError("無法連線到伺服器，請確認伺服器是否啟動後再試一次。");
+        showSpinError("spinErrorConnection");
         setSpinning(false);
         return;
     }
@@ -689,6 +918,12 @@ async function spin() {
 }
 
 // ---- Event wiring ----
+
+document.querySelectorAll(".lang-option").forEach((btn) => {
+    btn.addEventListener("click", () => {
+        if (btn.dataset.lang !== currentLanguage) applyLanguage(btn.dataset.lang);
+    });
+});
 
 drawerToggle.addEventListener("click", openDrawer);
 drawerClose.addEventListener("click", closeDrawer);
@@ -752,4 +987,4 @@ closeOverlayButton.addEventListener("click", () => {
 });
 
 // ---- Initial render ----
-render();
+applyLanguage(detectInitialLanguage());

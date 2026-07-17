@@ -29,7 +29,9 @@ java -jar target/lucky-wheel-0.0.1-SNAPSHOT.jar
 ```
 
 Open <http://localhost:8080>. Colleagues on the same network can open it at your
-machine's LAN address — handy for projecting the wheel in a meeting.
+machine's LAN address — handy for projecting the wheel in a meeting. The UI is
+bilingual (EN / 中) — it picks a language from your browser on first visit, and
+the toggle in the top bar switches it any time.
 
 ## Using it
 
