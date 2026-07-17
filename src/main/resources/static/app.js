@@ -11,6 +11,9 @@
  */
 
 const STORAGE_KEY = "luckyWheel.roster";
+// Sibling key: the auto-remove toggle is a roster-wide setting, not a
+// per-member one, so it gets its own localStorage entry.
+const AUTO_REMOVE_STORAGE_KEY = "luckyWheel.autoRemove";
 // P0 "Original" palette from the prototype verdict on issue #1: six segment
 // colours, with per-segment light/dark labels picked for contrast.
 const WHEEL_PALETTE = ["#ffd166", "#ef476f", "#06d6a0", "#118ab2", "#f78c6b", "#7b61a8"];
@@ -21,6 +24,13 @@ const WHEEL_LABEL_DARK = "#14172b";
 
 /** @type {Member[]} */
 let roster = loadRoster();
+
+/**
+ * Declared before spinning: when true, every member in a spin's finalised
+ * draw order is set not-eligible once the draw completes (see
+ * applyAutoRemove). When false, a spin never touches eligibility.
+ */
+let autoRemove = loadAutoRemove();
 
 /** True while a reveal (per-pick playback sequence) is in progress. */
 let spinning = false;
@@ -40,6 +50,7 @@ const addMemberNotice = document.getElementById("add-member-notice");
 const memberList = document.getElementById("member-list");
 const emptyRosterNotice = document.getElementById("empty-roster-notice");
 
+const recheckAllButton = document.getElementById("recheck-all-button");
 const copyRosterButton = document.getElementById("copy-roster-button");
 const copyRosterButtonDefaultLabel = copyRosterButton.textContent;
 
@@ -49,6 +60,7 @@ const bulkImportNotice = document.getElementById("bulk-import-notice");
 
 const countSelect = document.getElementById("count-select");
 const orderEveryoneButton = document.getElementById("order-everyone-button");
+const autoRemoveToggle = document.getElementById("auto-remove-toggle");
 const spinButton = document.getElementById("spin-button");
 const skipButton = document.getElementById("skip-button");
 const spinDisabledReason = document.getElementById("spin-disabled-reason");
@@ -80,6 +92,19 @@ function loadRoster() {
 
 function saveRoster() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(roster));
+}
+
+function loadAutoRemove() {
+    try {
+        return localStorage.getItem(AUTO_REMOVE_STORAGE_KEY) === "true";
+    } catch (error) {
+        console.error("Failed to load auto-remove setting from localStorage:", error);
+        return false;
+    }
+}
+
+function saveAutoRemove() {
+    localStorage.setItem(AUTO_REMOVE_STORAGE_KEY, String(autoRemove));
 }
 
 // ---- Roster mutations ----
@@ -130,6 +155,35 @@ function setEligible(name, eligible) {
 
 function eligibleMembers() {
     return roster.filter((member) => member.eligible);
+}
+
+/**
+ * The glossary's "one action re-checks everyone when a rotation
+ * completes": sets every member back to eligible, regardless of how they
+ * became ineligible (manual uncheck or auto-remove).
+ */
+function recheckAll() {
+    if (spinning) return;
+    for (const member of roster) {
+        member.eligible = true;
+    }
+    saveRoster();
+    render();
+}
+
+/**
+ * Marks every member named in `drawOrder` as not eligible. Called once a
+ * spin's draw order is finalised — after playReveal() resolves, whether it
+ * played out fully or was skipped — never mid-reveal. Only takes effect
+ * when the auto-remove toggle is on; the caller gates that.
+ * @param {string[]} drawOrder
+ */
+function applyAutoRemove(drawOrder) {
+    const picked = new Set(drawOrder);
+    for (const member of roster) {
+        if (picked.has(member.name)) member.eligible = false;
+    }
+    saveRoster();
 }
 
 /**
@@ -434,6 +488,8 @@ function render() {
 function renderRosterToolsAvailability() {
     bulkImportTextarea.disabled = spinning;
     bulkImportButton.disabled = spinning;
+    recheckAllButton.disabled = spinning;
+    autoRemoveToggle.disabled = spinning;
 }
 
 function renderMemberList() {
@@ -567,6 +623,8 @@ function setSpinning(isSpinning) {
         spinButton.disabled = true;
         countSelect.disabled = true;
         orderEveryoneButton.disabled = true;
+        autoRemoveToggle.disabled = true;
+        recheckAllButton.disabled = true;
     } else {
         render();
     }
@@ -617,6 +675,14 @@ async function spin() {
     activeSkipToken = null;
     skipButton.hidden = true;
 
+    // The draw order is finalised the moment playReveal resolves, whether
+    // it played out fully or was cut short by skip — auto-remove applies
+    // either way, since it acts on the decided result, not the animation.
+    if (autoRemove) {
+        applyAutoRemove(drawOrder);
+        render();
+    }
+
     showResultOverlay(drawOrder);
     // Spin controls stay disabled (spinning === true) until the overlay is
     // closed, so a new spin can start right after — not while it's open.
@@ -664,6 +730,15 @@ orderEveryoneButton.addEventListener("click", () => {
     if (eligibleCount === 0) return;
     countSelect.value = String(eligibleCount);
 });
+
+autoRemoveToggle.checked = autoRemove;
+autoRemoveToggle.addEventListener("change", () => {
+    if (spinning) return;
+    autoRemove = autoRemoveToggle.checked;
+    saveAutoRemove();
+});
+
+recheckAllButton.addEventListener("click", recheckAll);
 
 spinButton.addEventListener("click", spin);
 
