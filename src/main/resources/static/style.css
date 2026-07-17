@@ -80,6 +80,12 @@ canvas {
     margin: 0;
 }
 
+#top-bar-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
 #drawer-toggle {
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.06);
@@ -87,6 +93,77 @@ canvas {
     border-radius: 8px;
     padding: 0.5rem 0.9rem;
     font-size: 0.9rem;
+}
+
+#language-toggle {
+    position: relative;
+}
+
+#language-menu-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.06);
+    color: #dde;
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.9rem;
+}
+
+#language-menu-button .lang-chevron {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+}
+
+#language-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 150px;
+    background: var(--drawer-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    padding: 0.35rem;
+    z-index: 5;
+}
+
+#language-menu[hidden] {
+    display: none;
+}
+
+.lang-option {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font-size: 0.9rem;
+    text-align: left;
+    padding: 0.5rem 0.6rem;
+    border-radius: 7px;
+}
+
+.lang-option:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.lang-option.active {
+    color: var(--accent);
+}
+
+.lang-option .lang-tick {
+    color: var(--accent);
+    font-size: 0.85rem;
+    opacity: 0;
+}
+
+.lang-option.active .lang-tick {
+    opacity: 1;
 }
 
 #wheel-area {
