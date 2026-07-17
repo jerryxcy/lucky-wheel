@@ -1,0 +1,107 @@
+:root {
+    color-scheme: light;
+    font-family: -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+
+body {
+    max-width: 640px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #1f2933;
+    background: #f7f8fa;
+}
+
+h1 {
+    font-size: 1.5rem;
+}
+
+section {
+    background: #fff;
+    border: 1px solid #dde1e6;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+#add-member-form {
+    display: flex;
+    gap: 0.5rem;
+}
+
+#add-member-form input {
+    flex: 1;
+    padding: 0.4rem 0.6rem;
+    font-size: 1rem;
+}
+
+button {
+    padding: 0.4rem 0.9rem;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+#member-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0;
+}
+
+#member-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid #eef0f2;
+}
+
+#member-list li .member-name {
+    flex: 1;
+}
+
+#member-list li.not-eligible .member-name {
+    color: #9aa5b1;
+    text-decoration: line-through;
+}
+
+#spin-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.notice {
+    color: #b02a37;
+    background: #fdecea;
+    border: 1px solid #f5c2c7;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
+
+#empty-roster-notice,
+#no-result-notice {
+    color: #616e7c;
+    background: #f0f2f4;
+    border-color: #dde1e6;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+#draw-order-list li {
+    padding: 0.2rem 0;
+}
