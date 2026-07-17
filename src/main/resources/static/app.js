@@ -11,15 +11,18 @@
  */
 
 const STORAGE_KEY = "luckyWheel.roster";
-const WHEEL_PALETTE = ["#ffd166", "#ef476f", "#06d6a0", "#118ab2", "#f78c6b"];
-const WHEEL_TEXT_COLOR = "#14172b";
+// P0 "Original" palette from the prototype verdict on issue #1: six segment
+// colours, with per-segment light/dark labels picked for contrast.
+const WHEEL_PALETTE = ["#ffd166", "#ef476f", "#06d6a0", "#118ab2", "#f78c6b", "#7b61a8"];
+const WHEEL_LABEL_LIGHT = "#ffffff";
+const WHEEL_LABEL_DARK = "#14172b";
 
 /** @typedef {{ name: string, eligible: boolean }} Member */
 
 /** @type {Member[]} */
 let roster = loadRoster();
 
-/** True while a reveal (per-pick wheel animation sequence) is in progress. */
+/** True while a reveal (per-pick playback sequence) is in progress. */
 let spinning = false;
 
 /** Set to the in-flight reveal's skip token while spinning, else null. */
@@ -73,8 +76,8 @@ function saveRoster() {
 }
 
 // ---- Roster mutations ----
-// Guarded with `if (spinning) return;` — the wheel reveal is animating a
-// snapshot of the eligible members taken at spin time; mutating the roster
+// Guarded with `if (spinning) return;` — the reveal plays back a snapshot
+// of the eligible members taken at spin time; mutating the roster
 // mid-reveal would desync that snapshot from what's on screen.
 
 function normalizeName(name) {
@@ -160,12 +163,31 @@ function closeDrawer() {
 
 // ---- Wheel (canvas) ----
 
+/** WCAG relative luminance of a "#rrggbb" colour. */
+function luminance(hex) {
+    const channels = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map((v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrastRatio(a, b) {
+    const l1 = luminance(a);
+    const l2 = luminance(b);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+}
+
+/** Light or dark label, whichever reads better on the given segment fill. */
+function segmentLabelColor(fill) {
+    return contrastRatio(fill, WHEEL_LABEL_LIGHT) >= contrastRatio(fill, WHEEL_LABEL_DARK)
+        ? WHEEL_LABEL_LIGHT
+        : WHEEL_LABEL_DARK;
+}
+
 class Wheel {
-    constructor(canvas, palette, textColor) {
+    constructor(canvas, palette) {
         this.ctx = canvas.getContext("2d");
         this.size = canvas.width;
         this.palette = palette;
-        this.textColor = textColor;
         this.names = [];
         this.rotation = 0;
     }
@@ -188,7 +210,7 @@ class Wheel {
             ctx.arc(cx, cy, r, 0, Math.PI * 2);
             ctx.fillStyle = "rgba(136,136,136,0.2)";
             ctx.fill();
-            ctx.fillStyle = this.textColor;
+            ctx.fillStyle = WHEEL_LABEL_LIGHT;
             ctx.font = "15px sans-serif";
             ctx.textAlign = "center";
             ctx.fillText("名單是空的", cx, cy);
@@ -202,7 +224,11 @@ class Wheel {
             ctx.moveTo(cx, cy);
             ctx.arc(cx, cy, r, a0, a0 + seg);
             ctx.closePath();
-            ctx.fillStyle = this.palette[i % this.palette.length];
+            let fill = this.palette[i % this.palette.length];
+            // When the count wraps to exactly one leftover segment, the last
+            // segment would repeat the first's colour right next to it.
+            if (n % this.palette.length === 1 && i === n - 1) fill = this.palette[1];
+            ctx.fillStyle = fill;
             ctx.fill();
             ctx.strokeStyle = "rgba(255,255,255,.35)";
             ctx.stroke();
@@ -211,7 +237,7 @@ class Wheel {
             ctx.translate(cx, cy);
             ctx.rotate(a0 + seg / 2);
             ctx.textAlign = "right";
-            ctx.fillStyle = this.textColor;
+            ctx.fillStyle = segmentLabelColor(fill);
             ctx.font = `${Math.min(16, Math.max(11, r / 9))}px sans-serif`;
             let label = this.names[i];
             if (label.length > 8) label = label.slice(0, 7) + "…";
@@ -283,7 +309,7 @@ class Wheel {
     }
 }
 
-const wheel = new Wheel(wheelCanvas, WHEEL_PALETTE, WHEEL_TEXT_COLOR);
+const wheel = new Wheel(wheelCanvas, WHEEL_PALETTE);
 
 /**
  * Resolves after `ms`, unless `skipToken.skipped` becomes true first (in
