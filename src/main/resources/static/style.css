@@ -1,48 +1,281 @@
 :root {
-    color-scheme: light;
+    color-scheme: dark;
     font-family: -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    --bg-outer: #14172b;
+    --bg-inner: #2a2f4a;
+    --text: #f0f1f7;
+    --text-dim: #aab;
+    --accent: #ffd166;
+    --accent-ink: #14172b;
+    --border: #556;
+    --drawer-bg: #1d2136;
+    --drawer-row-border: #2c3150;
+    --danger: #e0484f;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
 }
 
 body {
-    max-width: 640px;
-    margin: 2rem auto;
-    padding: 0 1rem;
-    color: #1f2933;
-    background: #f7f8fa;
-}
-
-h1 {
-    font-size: 1.5rem;
-}
-
-section {
-    background: #fff;
-    border: 1px solid #dde1e6;
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 1.25rem;
-}
-
-#add-member-form {
-    display: flex;
-    gap: 0.5rem;
-}
-
-#add-member-form input {
-    flex: 1;
-    padding: 0.4rem 0.6rem;
-    font-size: 1rem;
+    margin: 0;
+    color: var(--text);
+    background: radial-gradient(circle at 50% 35%, var(--bg-inner) 0%, var(--bg-outer) 70%);
 }
 
 button {
-    padding: 0.4rem 0.9rem;
-    font-size: 1rem;
+    font-family: inherit;
     cursor: pointer;
 }
 
 button:disabled {
     cursor: not-allowed;
-    opacity: 0.6;
+    opacity: 0.5;
+}
+
+input {
+    font-family: inherit;
+}
+
+canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+/* ---- Stage ---- */
+
+#stage {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 4.5rem 1rem 8.5rem;
+}
+
+#top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.4rem;
+    z-index: 3;
+}
+
+#top-bar h1 {
+    font-size: 1rem;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    font-weight: 500;
+    margin: 0;
+}
+
+#drawer-toggle {
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.06);
+    color: #dde;
+    border-radius: 8px;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.9rem;
+}
+
+#wheel-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.2rem;
+}
+
+#pick-banner {
+    min-height: 1.8rem;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-align: center;
+    margin: 0;
+}
+
+#wheel-box {
+    position: relative;
+    width: min(480px, 82vw);
+}
+
+#wheel-pointer {
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 14px solid transparent;
+    border-right: 14px solid transparent;
+    border-top: 22px solid var(--danger);
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+    z-index: 2;
+}
+
+/* ---- Bottom bar ---- */
+
+#bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 1.2rem;
+    padding: 1rem 1rem 2.2rem;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.45));
+    z-index: 3;
+}
+
+#spin-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.9rem;
+    color: #ccd;
+}
+
+#spin-controls select {
+    background: #262b45;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.4rem 0.5rem;
+    font-size: 0.95rem;
+}
+
+.ghost-button {
+    padding: 0.55rem 1.2rem;
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    background: transparent;
+    color: #dde;
+    font-size: 0.9rem;
+}
+
+.spin-button {
+    padding: 0.85rem 3rem;
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    border: 0;
+    border-radius: 40px;
+    color: var(--accent-ink);
+    background: var(--accent);
+    box-shadow: 0 0 24px rgba(255, 209, 102, 0.45);
+}
+
+.notice {
+    max-width: 32rem;
+    text-align: center;
+    color: #ffd7d9;
+    background: rgba(224, 72, 79, 0.15);
+    border: 1px solid rgba(224, 72, 79, 0.5);
+    border-radius: 6px;
+    padding: 0.5rem 0.9rem;
+    margin: 0;
+    font-size: 0.9rem;
+    position: relative;
+    z-index: 3;
+}
+
+/* These notices are normal flex children of #stage (below the wheel, above
+   the fixed bottom bar's reserved padding) rather than position: fixed, so
+   they never collide with the spin controls regardless of bottom-bar
+   height (which itself can grow when it wraps on narrow screens). */
+
+/* ---- Drawer ---- */
+
+#drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 4;
+}
+
+#roster-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(340px, 88vw);
+    background: var(--drawer-bg);
+    padding: 1.25rem;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    box-shadow: -6px 0 20px rgba(0, 0, 0, 0.4);
+    overflow-y: auto;
+    z-index: 5;
+}
+
+#roster-drawer.open {
+    transform: none;
+}
+
+#drawer-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.9rem;
+}
+
+#roster-drawer h2 {
+    font-size: 0.95rem;
+    color: var(--accent);
+    margin: 0;
+}
+
+#drawer-close {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: #dde;
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+}
+
+#add-member-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+
+#add-member-form input {
+    flex: 1;
+    background: #262b45;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.5rem 0.6rem;
+    font-size: 0.95rem;
+}
+
+#add-member-form button {
+    border: 0;
+    border-radius: 6px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    padding: 0 0.9rem;
+    font-weight: 700;
+}
+
+#roster-drawer .notice {
+    max-width: none;
+    text-align: left;
 }
 
 #member-list {
@@ -54,9 +287,9 @@ button:disabled {
 #member-list li {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.35rem 0;
-    border-bottom: 1px solid #eef0f2;
+    gap: 0.55rem;
+    padding: 0.45rem 0.1rem;
+    border-bottom: 1px solid var(--drawer-row-border);
 }
 
 #member-list li .member-name {
@@ -64,33 +297,58 @@ button:disabled {
 }
 
 #member-list li.not-eligible .member-name {
-    color: #9aa5b1;
+    color: #667;
     text-decoration: line-through;
 }
 
-#spin-controls {
+#member-list li button {
+    border: 0;
+    background: none;
+    color: #e07;
+    font-size: 1rem;
+}
+
+/* ---- Result overlay ---- */
+
+#result-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 24, 0.93);
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.1rem;
+    z-index: 6;
+    padding: 1.5rem;
 }
 
-.notice {
-    color: #b02a37;
-    background: #fdecea;
-    border: 1px solid #f5c2c7;
-    border-radius: 4px;
-    padding: 0.5rem 0.75rem;
+#result-overlay[hidden] {
+    display: none;
+}
+
+#result-overlay h2 {
+    color: var(--accent);
+    font-size: 1.3rem;
+    letter-spacing: 0.1em;
+}
+
+#result-overlay ol {
+    font-size: 1.5rem;
+    line-height: 1.9;
+    padding-left: 2.2rem;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+#result-overlay button {
     margin-top: 0.5rem;
-    font-size: 0.9rem;
-}
-
-#empty-roster-notice,
-#no-result-notice {
-    color: #616e7c;
-    background: #f0f2f4;
-    border-color: #dde1e6;
+    padding: 0.6rem 2.1rem;
+    border-radius: 24px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: #dde;
+    font-size: 1rem;
 }
 
 .visually-hidden {
@@ -102,6 +360,17 @@ button:disabled {
     white-space: nowrap;
 }
 
-#draw-order-list li {
-    padding: 0.2rem 0;
+@media (max-width: 560px) {
+    #bottom-bar {
+        gap: 0.7rem;
+    }
+
+    #spin-controls {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .spin-button {
+        padding: 0.8rem 2.2rem;
+    }
 }
