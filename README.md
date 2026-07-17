@@ -25,7 +25,7 @@ Requires **Java 21**. From the repo root:
 
 ```bash
 ./mvnw package
-java -jar target/lucky-wheel-0.0.1-SNAPSHOT.jar
+java -jar target/lucky-wheel-1.0.0.jar
 ```
 
 Open <http://localhost:8080>. Colleagues on the same network can open it at your
