@@ -13,18 +13,23 @@
 	<version>0.0.1-SNAPSHOT</version>
 	<name>Lucky Wheel</name>
 	<description>Stateless spin-wheel decision tool</description>
-	<url/>
+	<url>https://github.com/jerryxcy/lucky-wheel</url>
 	<licenses>
-		<license/>
+		<license>
+			<name>MIT License</name>
+			<url>https://opensource.org/licenses/MIT</url>
+		</license>
 	</licenses>
 	<developers>
-		<developer/>
+		<developer>
+			<name>Jerry Wang</name>
+			<url>https://github.com/jerryxcy</url>
+		</developer>
 	</developers>
 	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
+		<connection>scm:git:https://github.com/jerryxcy/lucky-wheel.git</connection>
+		<developerConnection>scm:git:git@github.com:jerryxcy/lucky-wheel.git</developerConnection>
+		<url>https://github.com/jerryxcy/lucky-wheel</url>
 	</scm>
 	<properties>
 		<java.version>21</java.version>
