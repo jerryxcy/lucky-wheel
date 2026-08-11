@@ -1,0 +1,704 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway.
+  Question: how should Shared Wheel mode and its controls fit the existing
+  stage-style UI? Three variants, switchable via ?variant=A|B|C on this route.
+  State is in memory and all server interactions are stubs. Do not promote.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared Wheel UI prototype</title>
+<style>
+  :root {
+    color-scheme: dark;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", sans-serif;
+    --bg-outer: #14172b;
+    --bg-inner: #2a2f4a;
+    --panel: #1d2136;
+    --panel-raised: #262b45;
+    --text: #f0f1f7;
+    --dim: #aab0c3;
+    --border: #555d78;
+    --accent: #ffd166;
+    --accent-ink: #14172b;
+    --green: #55d69e;
+    --danger: #ef6a70;
+    --shadow: 0 18px 48px rgba(0, 0, 0, .35);
+  }
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body { margin: 0; background: var(--bg-outer); color: var(--text); }
+  button, input, select { font: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .48; }
+  .variant { display: none; min-height: 100vh; }
+  .variant.active { display: block; }
+  .when-local { display: none !important; }
+  body.mode-local .when-local { display: flex !important; }
+  body.mode-local .when-shared { display: none !important; }
+  .eyebrow { color: var(--dim); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+  .muted { color: var(--dim); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(85,214,158,.12); flex: none; }
+  .ghost {
+    border: 1px solid var(--border); background: rgba(255,255,255,.04);
+    color: var(--text); border-radius: 9px; padding: 8px 12px;
+  }
+  .ghost:hover { background: rgba(255,255,255,.08); }
+  .primary {
+    border: 0; background: var(--accent); color: var(--accent-ink);
+    border-radius: 10px; padding: 10px 16px; font-weight: 750;
+  }
+  .danger { color: #ff9ca0 !important; border-color: rgba(239,106,112,.5) !important; }
+  .icon-button {
+    width: 38px; height: 38px; border: 1px solid var(--border); border-radius: 9px;
+    background: rgba(255,255,255,.04); color: var(--text); display: grid; place-items: center;
+  }
+
+  /* Shared stage pieces */
+  .stage-core {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; min-height: 100%;
+  }
+  .pick-banner { height: 30px; color: var(--accent); font-size: 20px; font-weight: 750; }
+  .wheel-box { position: relative; width: min(430px, 54vh, 78vw); aspect-ratio: 1; }
+  .wheel-pointer {
+    position: absolute; z-index: 3; top: -7px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent;
+    border-top: 23px solid #e0484f; filter: drop-shadow(0 2px 2px rgba(0,0,0,.4));
+  }
+  .wheel-face {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(#ffd166 0 60deg,#ef476f 60deg 120deg,#06d6a0 120deg 180deg,#118ab2 180deg 240deg,#f78c6b 240deg 300deg,#7b61a8 300deg);
+    border: 7px solid rgba(255,255,255,.14); box-shadow: var(--shadow), inset 0 0 0 2px rgba(0,0,0,.18);
+  }
+  .wheel-face::after {
+    content: ""; position: absolute; inset: 44%; border-radius: 50%; background: #f0f1f7;
+    box-shadow: 0 0 0 4px var(--accent), 0 4px 10px rgba(0,0,0,.35);
+  }
+  .wheel-label {
+    position: absolute; left: 50%; top: 50%; transform-origin: 0 0;
+    color: #fff; font-size: 14px; font-weight: 750; text-shadow: 0 1px 3px rgba(0,0,0,.55);
+    white-space: nowrap;
+  }
+  .wheel-label.light { color: #14172b; text-shadow: none; }
+  .latest-result {
+    display: flex; align-items: center; gap: 12px; max-width: min(560px, 88vw);
+    padding: 9px 13px; border: 1px solid rgba(255,209,102,.28); border-radius: 12px;
+    background: rgba(255,209,102,.08); font-size: 13px; transform: translateY(-24px);
+  }
+  .latest-result strong { color: var(--accent); }
+  .latest-result .result-names { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .latest-result button { margin-left: auto; flex: none; padding: 5px 9px; font-size: 12px; }
+  .spin-controls {
+    display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 12px;
+  }
+  .spin-controls label { color: #d7d9e3; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+  .spin-controls select {
+    color: var(--text); background: var(--panel-raised); border: 1px solid var(--border);
+    border-radius: 7px; padding: 7px 9px;
+  }
+  .spin-button {
+    border: 0; border-radius: 40px; padding: 13px 52px; background: var(--accent);
+    color: var(--accent-ink); font-size: 19px; font-weight: 850; letter-spacing: .2em;
+    box-shadow: 0 0 25px rgba(255,209,102,.35);
+  }
+  .toggle { accent-color: var(--accent); }
+
+  /* A — persistent header tabs + strip */
+  #vA {
+    background: radial-gradient(circle at 50% 35%, var(--bg-inner), var(--bg-outer) 70%);
+    padding: 128px 20px 150px;
+  }
+  #vA .a-header {
+    position: fixed; z-index: 10; top: 0; left: 0; right: 0; height: 78px;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px;
+    padding: 11px 22px; background: rgba(20,23,43,.86); backdrop-filter: blur(18px);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  #vA .brand { letter-spacing: .2em; color: var(--dim); font-size: 14px; }
+  #vA .a-tools { display: flex; justify-content: flex-end; gap: 8px; }
+  #vA .mode-tabs {
+    display: grid; grid-template-columns: 1fr 1fr; min-width: 520px; padding: 4px;
+    border: 1px solid var(--border); border-radius: 13px; background: rgba(255,255,255,.04);
+  }
+  #vA .mode-tab {
+    border: 0; border-radius: 9px; background: transparent; color: var(--dim);
+    padding: 7px 14px; text-align: left;
+  }
+  #vA .mode-tab strong { display: block; color: var(--text); font-size: 13px; }
+  #vA .mode-tab small { display: block; font-size: 10px; margin-top: 2px; }
+  #vA .mode-tab.active { background: var(--panel-raised); box-shadow: 0 2px 8px rgba(0,0,0,.22); }
+  #vA .mode-tab.active strong { color: var(--accent); }
+  #vA .shared-strip {
+    position: fixed; z-index: 9; top: 78px; left: 0; right: 0; min-height: 48px;
+    display: flex; align-items: center; justify-content: center; gap: 16px; padding: 8px 18px;
+    background: rgba(29,33,54,.94); border-bottom: 1px solid rgba(255,255,255,.07);
+    font-size: 12px;
+  }
+  #vA .shared-strip .name { font-weight: 750; color: var(--text); }
+  #vA .shared-strip .live { display: flex; align-items: center; gap: 8px; color: var(--green); }
+  #vA .shared-strip .sep { width: 1px; height: 19px; background: var(--border); }
+  #vA .local-strip { color: var(--dim); }
+  #vA .a-stage { min-height: calc(100vh - 278px); }
+  #vA .a-bottom {
+    position: fixed; z-index: 8; bottom: 0; left: 0; right: 0; padding: 16px 20px 108px;
+    background: linear-gradient(transparent, rgba(8,10,23,.82) 45%);
+  }
+
+  /* B — explicit control rail */
+  #vB { background: #111426; }
+  #vB .b-shell { display: grid; grid-template-columns: 310px 1fr; min-height: 100vh; }
+  #vB .rail {
+    position: relative; z-index: 4; padding: 22px 18px 88px; background: var(--panel);
+    border-right: 1px solid rgba(255,255,255,.07); box-shadow: 8px 0 30px rgba(0,0,0,.15);
+    overflow-y: auto;
+  }
+  #vB .rail-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  #vB .brand { letter-spacing: .18em; color: var(--dim); font-size: 13px; }
+  #vB .rail h2 { font-size: 12px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; margin: 0 0 9px; }
+  #vB .mode-card {
+    width: 100%; display: block; text-align: left; border: 1px solid var(--border);
+    border-radius: 13px; padding: 13px; margin-bottom: 9px; background: rgba(255,255,255,.025); color: var(--text);
+  }
+  #vB .mode-card.active { border-color: var(--accent); background: rgba(255,209,102,.08); }
+  #vB .mode-card strong { display: block; font-size: 14px; }
+  #vB .mode-card small { display: block; color: var(--dim); font-size: 11px; line-height: 1.4; margin-top: 4px; }
+  #vB .shared-card { margin-top: 16px; padding: 15px; border-radius: 14px; background: var(--panel-raised); }
+  #vB .shared-card .title { font-size: 18px; font-weight: 780; margin: 4px 0 10px; }
+  #vB .meta-row { display: flex; gap: 9px; align-items: center; font-size: 12px; color: var(--dim); margin: 8px 0; }
+  #vB .rail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 13px; }
+  #vB .rail-actions button { padding: 8px; font-size: 12px; }
+  #vB .rail .create-box { flex-direction: column; align-items: stretch; gap: 9px; margin-top: 16px; }
+  #vB .create-box p { font-size: 12px; line-height: 1.45; color: var(--dim); margin: 0; }
+  #vB .b-main {
+    position: relative; min-width: 0; padding: 66px 24px 150px;
+    background: radial-gradient(circle at 52% 36%, var(--bg-inner), var(--bg-outer) 72%);
+  }
+  #vB .b-top { position: absolute; top: 18px; right: 22px; display: flex; gap: 8px; }
+  #vB .b-stage { min-height: calc(100vh - 216px); }
+  #vB .b-bottom {
+    position: absolute; bottom: 0; left: 0; right: 0; padding: 16px 20px 108px;
+    background: linear-gradient(transparent, rgba(8,10,23,.82) 45%);
+  }
+
+  /* C — projection-first badge + command sheet */
+  #vC {
+    position: relative; overflow: hidden;
+    background: radial-gradient(circle at 50% 35%, var(--bg-inner), var(--bg-outer) 70%);
+    padding: 76px 18px 150px;
+  }
+  #vC .c-header {
+    position: fixed; z-index: 8; top: 0; left: 0; right: 0; display: flex;
+    justify-content: space-between; align-items: flex-start; padding: 16px 20px;
+  }
+  #vC .identity-badge {
+    display: flex; align-items: center; gap: 11px; max-width: min(480px, 70vw);
+    border: 1px solid var(--border); border-radius: 13px; padding: 9px 12px;
+    background: rgba(20,23,43,.78); backdrop-filter: blur(14px); color: var(--text); text-align: left;
+  }
+  #vC .identity-badge .badge-main { min-width: 0; }
+  #vC .identity-badge strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #vC .identity-badge small { display: block; margin-top: 2px; color: var(--dim); }
+  #vC .identity-badge .chev { color: var(--dim); margin-left: 5px; }
+  #vC .c-tools { display: flex; gap: 8px; }
+  #vC .scope-caption {
+    position: fixed; z-index: 7; top: 77px; left: 20px; color: var(--dim);
+    font-size: 11px; padding-left: 12px;
+  }
+  #vC .c-stage { min-height: calc(100vh - 226px); }
+  #vC .c-bottom {
+    position: fixed; z-index: 6; bottom: 0; left: 0; right: 0; padding: 16px 20px 108px;
+    background: linear-gradient(transparent, rgba(8,10,23,.88) 48%);
+  }
+  #vC .local-create-callout {
+    position: fixed; z-index: 7; left: 50%; bottom: 142px; transform: translateX(-50%);
+    width: min(590px, calc(100vw - 32px)); align-items: center; justify-content: space-between;
+    gap: 16px; border: 1px solid rgba(255,209,102,.45); border-radius: 14px;
+    padding: 12px 14px; background: rgba(29,33,54,.96); box-shadow: var(--shadow);
+  }
+  #vC .local-create-callout strong { display: block; color: var(--accent); font-size: 13px; }
+  #vC .local-create-callout small { color: var(--dim); }
+  #vC .sheet-backdrop { position: fixed; z-index: 20; inset: 0; background: rgba(0,0,0,.42); display: none; }
+  #vC .sheet-backdrop.open { display: block; }
+  #vC .command-sheet {
+    position: fixed; z-index: 21; top: 0; left: 0; bottom: 0; width: min(390px, 92vw);
+    padding: 22px 20px 84px; overflow-y: auto; background: var(--panel);
+    transform: translateX(-105%); transition: transform .22s ease; box-shadow: 12px 0 35px rgba(0,0,0,.4);
+  }
+  #vC .command-sheet.open { transform: none; }
+  #vC .sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; }
+  #vC .sheet-head h2 { font-size: 17px; margin: 0; }
+  #vC .sheet-mode {
+    width: 100%; display: flex; align-items: center; gap: 11px; text-align: left;
+    border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 9px;
+    background: rgba(255,255,255,.025); color: var(--text);
+  }
+  #vC .sheet-mode.active { border-color: var(--accent); background: rgba(255,209,102,.08); }
+  #vC .sheet-mode .mode-icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--panel-raised); }
+  #vC .sheet-mode strong, #vC .sheet-mode small { display: block; }
+  #vC .sheet-mode small { color: var(--dim); margin-top: 2px; }
+  #vC .sheet-detail { margin-top: 18px; padding-top: 17px; border-top: 1px solid rgba(255,255,255,.08); }
+  #vC .sheet-detail h3 { font-size: 18px; margin: 5px 0 13px; }
+  #vC .sheet-detail .meta-row { display: flex; align-items: center; gap: 9px; color: var(--dim); font-size: 12px; margin: 9px 0; }
+  #vC .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; }
+
+  /* Common modal, roster drawer, and prototype switcher */
+  #roster-backdrop, #create-backdrop {
+    display: none; position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.55);
+  }
+  #roster-backdrop.open, #create-backdrop.open { display: block; }
+  #roster-drawer {
+    position: fixed; z-index: 41; top: 0; right: 0; bottom: 0; width: min(360px, 92vw);
+    padding: 20px 18px 90px; overflow-y: auto; background: var(--panel);
+    transform: translateX(105%); transition: transform .22s ease; box-shadow: -12px 0 35px rgba(0,0,0,.4);
+  }
+  #roster-drawer.open { transform: none; }
+  .drawer-head { display: flex; justify-content: space-between; align-items: center; }
+  .drawer-head h2 { margin: 0; font-size: 17px; color: var(--accent); }
+  .drawer-subtitle { color: var(--dim); font-size: 12px; margin: 5px 0 16px; }
+  #roster-list { list-style: none; padding: 0; margin: 0; }
+  #roster-list li { display: flex; align-items: center; gap: 9px; padding: 9px 2px; border-bottom: 1px solid rgba(255,255,255,.07); }
+  #roster-list li span { flex: 1; }
+  #roster-list li.out span { text-decoration: line-through; color: #737992; }
+  .drawer-tools { display: flex; gap: 8px; margin-top: 16px; }
+  .drawer-tools button { flex: 1; font-size: 12px; }
+  #create-modal {
+    position: fixed; z-index: 42; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    display: none; width: min(440px, calc(100vw - 30px)); padding: 22px; border-radius: 16px;
+    background: var(--panel); box-shadow: var(--shadow); border: 1px solid var(--border);
+  }
+  #create-modal.open { display: block; }
+  #create-modal h2 { margin: 0 0 7px; font-size: 20px; }
+  #create-modal p { color: var(--dim); font-size: 13px; line-height: 1.5; margin: 0 0 17px; }
+  #create-modal label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 6px; }
+  #create-modal input {
+    width: 100%; padding: 10px 11px; border-radius: 9px; border: 1px solid var(--border);
+    background: var(--panel-raised); color: var(--text);
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  #toast {
+    position: fixed; z-index: 60; top: 18px; left: 50%; transform: translate(-50%,-12px);
+    opacity: 0; pointer-events: none; padding: 9px 14px; border-radius: 9px;
+    background: #effff8; color: #143d2d; box-shadow: var(--shadow); transition: .18s ease;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%,0); }
+  #prototype-switcher {
+    position: fixed; z-index: 100; left: 50%; bottom: 12px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-radius: 28px;
+    background: #090a10; color: #fff; box-shadow: 0 6px 22px rgba(0,0,0,.5); border: 1px solid #343746;
+  }
+  #prototype-switcher button { border: 0; background: #292c38; color: #fff; border-radius: 50%; width: 29px; height: 29px; }
+  #prototype-switcher .switch-label { min-width: 190px; text-align: center; line-height: 1.2; }
+  #prototype-switcher .prototype-tag { display: block; color: #ff858b; font-size: 9px; letter-spacing: .14em; }
+  #state-button { font-size: 11px !important; width: auto !important; border-radius: 12px !important; padding: 0 8px; }
+  #state-panel {
+    display: none; position: fixed; z-index: 99; left: 50%; bottom: 64px; transform: translateX(-50%);
+    width: min(520px, calc(100vw - 24px)); max-height: 38vh; overflow: auto; margin: 0;
+    padding: 12px; border-radius: 12px; background: #090a10; color: #bcefd6;
+    border: 1px solid #343746; box-shadow: var(--shadow); font: 11px/1.45 ui-monospace, monospace;
+  }
+  #state-panel.open { display: block; }
+
+  @media (max-width: 900px) {
+    #vA .a-header { grid-template-columns: auto 1fr auto; gap: 10px; padding: 9px 12px; }
+    #vA .brand { display: none; }
+    #vA .mode-tabs { min-width: 0; width: 100%; }
+    #vA .mode-tab { padding: 7px 9px; }
+    #vA .mode-tab small { display: none; }
+    #vA .shared-strip { justify-content: flex-start; overflow-x: auto; }
+    #vB .b-shell { grid-template-columns: 270px 1fr; }
+  }
+  @media (max-width: 690px) {
+    .wheel-box { width: min(360px, 82vw, 55vh); }
+    #vA { padding-top: 132px; }
+    #vA .a-header { height: 74px; }
+    #vA .a-tools .lang { display: none; }
+    #vA .shared-strip { top: 74px; gap: 10px; }
+    #vA .shared-strip .expiry, #vA .shared-strip .sep { display: none; }
+    #vB .b-shell { display: block; }
+    #vB .rail { position: static; padding: 10px 8px; border-right: 0; }
+    #vB .rail-head { display: none; }
+    #vB .rail h2, #vB .shared-card, #vB .create-box { display: none !important; }
+    #vB .mode-card { display: inline-block; width: calc(50% - 6px); margin: 0 4px 0 0; padding: 9px; }
+    #vB .mode-card small { display: none; }
+    #vB .b-main { min-height: calc(100vh - 76px); padding-top: 54px; }
+    #vB .b-bottom { padding-bottom: 145px; }
+    #vC .scope-caption { display: none; }
+    .latest-result { max-width: 94vw; }
+    .spin-button { padding: 12px 36px; }
+  }
+</style>
+</head>
+<body class="mode-shared">
+
+<!-- A — persistent mode tabs -->
+<section id="vA" class="variant">
+  <header class="a-header">
+    <div class="brand">LUCKY WHEEL</div>
+    <nav class="mode-tabs" aria-label="Wheel mode">
+      <button class="mode-tab" data-action="local">
+        <strong>Local Wheel</strong><small>Only in this browser</small>
+      </button>
+      <button class="mode-tab" data-action="shared">
+        <strong data-shared-tab-title>Shared Wheel</strong><small data-shared-tab-copy>Saved on server, accessible by link</small>
+      </button>
+    </nav>
+    <div class="a-tools"><button class="ghost lang">🌐 English</button><button class="ghost" data-action="roster">⚙ Roster</button></div>
+  </header>
+  <div class="shared-strip when-shared">
+    <span class="name" data-wheel-name></span><span class="sep"></span>
+    <span class="live"><span class="dot"></span>Live updates connected</span><span class="sep"></span>
+    <span class="expiry">Expires <span data-expiry></span></span>
+    <button class="ghost" data-action="copy-link">Copy link</button>
+    <button class="ghost danger" data-action="delete">Delete</button>
+  </div>
+  <div class="shared-strip local-strip when-local">
+    <span>Local Wheel — only in this browser</span>
+    <button class="primary" data-action="create">Create Shared Wheel</button>
+    <span>Saved on server, accessible by link</span>
+  </div>
+  <main class="stage-core a-stage">
+    <div class="pick-banner" data-pick-banner></div>
+    <div class="wheel-box" data-wheel></div>
+    <div class="latest-result"><span class="eyebrow">Latest result</span><strong class="result-names" data-latest-result></strong><button class="ghost" data-action="copy-result">Copy</button></div>
+  </main>
+  <footer class="a-bottom"><div class="spin-controls" data-spin-controls></div></footer>
+</section>
+
+<!-- B — control rail -->
+<section id="vB" class="variant">
+  <div class="b-shell">
+    <aside class="rail">
+      <div class="rail-head"><span class="brand">LUCKY WHEEL</span><button class="icon-button">🌐</button></div>
+      <h2>Wheel mode</h2>
+      <button class="mode-card" data-action="local"><strong>Local Wheel</strong><small>Only in this browser. No server setup required.</small></button>
+      <button class="mode-card" data-action="shared"><strong data-shared-tab-title>Shared Wheel</strong><small>Saved on server and accessible to anyone with the link.</small></button>
+      <div class="shared-card when-shared">
+        <span class="eyebrow">Current shared wheel</span>
+        <div class="title" data-wheel-name></div>
+        <div class="meta-row"><span class="dot"></span><span>Live updates connected</span></div>
+        <div class="meta-row"><span>◷</span><span>Expires <span data-expiry></span></span></div>
+        <div class="meta-row"><span>↻</span><span>Server version <span data-version></span></span></div>
+        <div class="rail-actions">
+          <button class="ghost" data-action="copy-link">Copy link</button>
+          <button class="ghost" data-action="rename">Rename</button>
+          <button class="ghost" data-action="roster">Roster</button>
+          <button class="ghost danger" data-action="delete">Delete</button>
+        </div>
+      </div>
+      <div class="create-box when-local">
+        <p>Turn the current Local roster into a server-backed Wheel that anyone with the link can operate.</p>
+        <button class="primary" data-action="create">Create Shared Wheel</button>
+        <span class="muted" style="font-size:11px">Saved on server, accessible by link</span>
+      </div>
+    </aside>
+    <main class="b-main">
+      <div class="b-top"><button class="ghost" data-action="roster">⚙ Roster</button></div>
+      <div class="stage-core b-stage">
+        <div class="pick-banner" data-pick-banner></div>
+        <div class="wheel-box" data-wheel></div>
+        <div class="latest-result"><span class="eyebrow">Latest result</span><strong class="result-names" data-latest-result></strong><button class="ghost" data-action="copy-result">Copy</button></div>
+      </div>
+      <footer class="b-bottom"><div class="spin-controls" data-spin-controls></div></footer>
+    </main>
+  </div>
+</section>
+
+<!-- C — projection-first identity badge -->
+<section id="vC" class="variant">
+  <header class="c-header">
+    <button class="identity-badge" data-action="sheet">
+      <span class="dot when-shared"></span><span aria-hidden="true" class="when-local">◉</span>
+      <span class="badge-main"><strong data-identity-title></strong><small data-identity-subtitle></small></span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="c-tools"><button class="icon-button">🌐</button><button class="ghost" data-action="roster">⚙ Roster</button></div>
+  </header>
+  <div class="scope-caption when-shared">Saved on server · Anyone with the link can edit</div>
+  <div class="scope-caption when-local">Only in this browser</div>
+  <main class="stage-core c-stage">
+    <div class="pick-banner" data-pick-banner></div>
+    <div class="wheel-box" data-wheel></div>
+    <div class="latest-result"><span class="eyebrow">Latest result</span><strong class="result-names" data-latest-result></strong><button class="ghost" data-action="copy-result">Copy</button></div>
+  </main>
+  <div class="local-create-callout when-local">
+    <span><strong>Create Shared Wheel</strong><small>Saved on server, accessible by link</small></span>
+    <button class="primary" data-action="create">Create</button>
+  </div>
+  <footer class="c-bottom"><div class="spin-controls" data-spin-controls></div></footer>
+  <div class="sheet-backdrop" data-sheet-backdrop></div>
+  <aside class="command-sheet" data-command-sheet>
+    <div class="sheet-head"><h2>Wheel mode</h2><button class="icon-button" data-action="close-sheet">×</button></div>
+    <button class="sheet-mode" data-action="local"><span class="mode-icon">◉</span><span><strong>Local Wheel</strong><small>Only in this browser</small></span></button>
+    <button class="sheet-mode" data-action="shared"><span class="mode-icon">↗</span><span><strong data-shared-tab-title>Shared Wheel</strong><small>Saved on server, accessible by link</small></span></button>
+    <div class="sheet-detail when-shared">
+      <span class="eyebrow">Current shared wheel</span><h3 data-wheel-name></h3>
+      <div class="meta-row"><span class="dot"></span><span>Live updates connected</span></div>
+      <div class="meta-row"><span>◷</span><span>Expires <span data-expiry></span></span></div>
+      <div class="meta-row"><span>↻</span><span>Server version <span data-version></span></span></div>
+      <div class="sheet-actions"><button class="ghost" data-action="copy-link">Copy link</button><button class="ghost" data-action="rename">Rename</button><button class="ghost" data-action="roster">Roster</button><button class="ghost danger" data-action="delete">Delete</button></div>
+    </div>
+    <div class="sheet-detail when-local">
+      <p class="muted">Copy your current roster, eligibility, and auto-remove setting to the server.</p>
+      <button class="primary" data-action="create">Create Shared Wheel</button>
+    </div>
+  </aside>
+</section>
+
+<!-- Shared throwaway surfaces -->
+<div id="roster-backdrop" data-action="close-roster"></div>
+<aside id="roster-drawer">
+  <div class="drawer-head"><h2>Roster</h2><button class="icon-button" data-action="close-roster">×</button></div>
+  <p class="drawer-subtitle">Checked members are eligible for the next Spin. This same control is available in Local and Shared modes.</p>
+  <ul id="roster-list"></ul>
+  <div class="drawer-tools"><button class="ghost" data-action="recheck">Re-check all</button><button class="ghost" data-action="copy-roster">Copy roster</button></div>
+</aside>
+
+<div id="create-backdrop"></div>
+<form id="create-modal">
+  <h2 data-modal-title>Create Shared Wheel</h2>
+  <p>Your current roster, eligibility, and auto-remove setting will be copied to the server. Local Wheel remains unchanged.</p>
+  <label for="wheel-name">Wheel name</label>
+  <input id="wheel-name" maxlength="80" value="Friday facilitation" required>
+  <div class="modal-actions"><button type="button" class="ghost" data-action="cancel-create">Cancel</button><button type="submit" class="primary" data-submit-copy>Create Shared Wheel</button></div>
+</form>
+
+<div id="toast" role="status"></div>
+<pre id="state-panel"></pre>
+<div id="prototype-switcher">
+  <button id="variant-prev" aria-label="Previous variant">←</button>
+  <div class="switch-label"><span class="prototype-tag">PROTOTYPE</span><span id="variant-label"></span></div>
+  <button id="state-button">STATE</button>
+  <button id="variant-next" aria-label="Next variant">→</button>
+</div>
+
+<script>
+"use strict";
+
+const state = {
+  mode: "shared",
+  wheelName: "Friday facilitation",
+  version: 13,
+  connection: "connected",
+  expiresAt: "Sep 10, 2026, 10:30 AM",
+  autoRemove: true,
+  count: 2,
+  latestResult: ["Alice", "Carol"],
+  members: [
+    {name:"Alice", eligible:false}, {name:"Bob", eligible:true},
+    {name:"Carol", eligible:false}, {name:"David", eligible:true},
+    {name:"Emma", eligible:true}, {name:"Frank", eligible:true}
+  ]
+};
+
+const variants = {
+  A: "Mode tabs · 頂部分頁",
+  B: "Control rail · 左側控制列",
+  C: "Stage badge · 舞台徽章"
+};
+const variantKeys = Object.keys(variants);
+let currentVariant = new URLSearchParams(location.search).get("variant");
+if (!variantKeys.includes(currentVariant)) currentVariant = "A";
+let toastTimer;
+
+function wheelMarkup() {
+  const labels = state.members.map((member, index) => {
+    const angle = index * (360 / state.members.length) + 30;
+    const light = index === 0 || index === 2 || index === 4 ? " light" : "";
+    return `<span class="wheel-label${light}" style="transform:rotate(${angle}deg) translate(88px,-7px) rotate(${-angle}deg)">${member.name}</span>`;
+  }).join("");
+  return `<div class="wheel-pointer"></div><div class="wheel-face">${labels}</div>`;
+}
+
+function controlsMarkup() {
+  return `
+    <label>Number to pick
+      <select data-action="count"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
+    </label>
+    <button class="ghost" data-action="order-all">Order everyone</button>
+    <label><input class="toggle" type="checkbox" data-action="auto-remove"> Skip winners in future spins</label>
+    <button class="spin-button" data-action="spin">SPIN</button>`;
+}
+
+function render() {
+  document.body.classList.toggle("mode-local", state.mode === "local");
+  document.body.classList.toggle("mode-shared", state.mode === "shared");
+  document.querySelectorAll(".variant").forEach(el => el.classList.toggle("active", el.id === `v${currentVariant}`));
+  document.querySelectorAll("[data-wheel]").forEach(el => el.innerHTML = wheelMarkup());
+  document.querySelectorAll("[data-spin-controls]").forEach(el => el.innerHTML = controlsMarkup());
+  document.querySelectorAll("[data-wheel-name]").forEach(el => el.textContent = state.wheelName);
+  document.querySelectorAll("[data-expiry]").forEach(el => el.textContent = state.expiresAt || "Never");
+  document.querySelectorAll("[data-version]").forEach(el => el.textContent = state.version);
+  document.querySelectorAll("[data-latest-result]").forEach(el => el.textContent = state.latestResult.join(" → ") || "No result yet");
+  document.querySelectorAll("[data-pick-banner]").forEach(el => el.textContent = "");
+  document.querySelectorAll("[data-shared-tab-title]").forEach(el => el.textContent = state.mode === "shared" ? state.wheelName : "Create Shared Wheel");
+  document.querySelectorAll("[data-shared-tab-copy]").forEach(el => el.textContent = "Saved on server, accessible by link");
+  document.querySelectorAll(".mode-tab, .mode-card, .sheet-mode").forEach(el => {
+    const action = el.dataset.action;
+    el.classList.toggle("active", action === state.mode);
+  });
+  document.querySelectorAll('[data-action="count"]').forEach(el => el.value = String(state.count));
+  document.querySelectorAll('[data-action="auto-remove"]').forEach(el => el.checked = state.autoRemove);
+  document.querySelectorAll("[data-identity-title]").forEach(el => el.textContent = state.mode === "shared" ? state.wheelName : "Local Wheel");
+  document.querySelectorAll("[data-identity-subtitle]").forEach(el => el.textContent = state.mode === "shared" ? "Shared Wheel · Live updates connected" : "Only in this browser");
+  document.getElementById("variant-label").textContent = `${currentVariant} — ${variants[currentVariant]}`;
+  renderRoster();
+  document.getElementById("state-panel").textContent = JSON.stringify({
+    variant: currentVariant,
+    mode: state.mode,
+    wheelName: state.mode === "shared" ? state.wheelName : null,
+    version: state.mode === "shared" ? state.version : null,
+    connection: state.mode === "shared" ? state.connection : null,
+    expiresAt: state.mode === "shared" ? state.expiresAt : null,
+    autoRemove: state.autoRemove,
+    count: state.count,
+    latestResult: state.latestResult,
+    members: state.members
+  }, null, 2);
+}
+
+function renderRoster() {
+  const list = document.getElementById("roster-list");
+  list.innerHTML = state.members.map((member, index) => `
+    <li class="${member.eligible ? "" : "out"}">
+      <input type="checkbox" ${member.eligible ? "checked" : ""} data-member-index="${index}">
+      <span>${member.name}</span><button class="ghost danger" data-remove-index="${index}">Remove</button>
+    </li>`).join("");
+}
+
+function setVariant(key) {
+  currentVariant = key;
+  const url = new URL(location.href);
+  url.searchParams.set("variant", key);
+  history.replaceState(null, "", url);
+  closeSheet();
+  render();
+}
+function cycleVariant(delta) {
+  const index = variantKeys.indexOf(currentVariant);
+  setVariant(variantKeys[(index + delta + variantKeys.length) % variantKeys.length]);
+}
+function showToast(message) {
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), 1500);
+}
+function openRoster() {
+  document.getElementById("roster-backdrop").classList.add("open");
+  document.getElementById("roster-drawer").classList.add("open");
+}
+function closeRoster() {
+  document.getElementById("roster-backdrop").classList.remove("open");
+  document.getElementById("roster-drawer").classList.remove("open");
+}
+function openCreate(rename = false) {
+  document.querySelector("[data-modal-title]").textContent = rename ? "Rename Shared Wheel" : "Create Shared Wheel";
+  document.querySelector("[data-submit-copy]").textContent = rename ? "Save name" : "Create Shared Wheel";
+  document.getElementById("wheel-name").value = state.wheelName;
+  document.getElementById("create-modal").dataset.rename = rename ? "true" : "false";
+  document.getElementById("create-backdrop").classList.add("open");
+  document.getElementById("create-modal").classList.add("open");
+  setTimeout(() => document.getElementById("wheel-name").focus(), 0);
+}
+function closeCreate() {
+  document.getElementById("create-backdrop").classList.remove("open");
+  document.getElementById("create-modal").classList.remove("open");
+}
+function openSheet() {
+  document.querySelector("[data-sheet-backdrop]").classList.add("open");
+  document.querySelector("[data-command-sheet]").classList.add("open");
+}
+function closeSheet() {
+  document.querySelector("[data-sheet-backdrop]").classList.remove("open");
+  document.querySelector("[data-command-sheet]").classList.remove("open");
+}
+function spin() {
+  const eligible = state.members.filter(member => member.eligible);
+  if (!eligible.length) return showToast("No eligible members");
+  const count = Math.min(state.count, eligible.length);
+  state.latestResult = eligible.slice(0, count).map(member => member.name);
+  if (state.autoRemove) eligible.slice(0, count).forEach(member => member.eligible = false);
+  if (state.mode === "shared") state.version += 1;
+  render();
+  document.querySelectorAll("[data-pick-banner]").forEach(el => el.textContent = `Committed: ${state.latestResult.join(" → ")}`);
+  showToast(state.mode === "shared" ? "Shared Spin committed" : "Local Spin complete");
+}
+
+document.addEventListener("click", event => {
+  const actionEl = event.target.closest("[data-action]");
+  if (!actionEl) return;
+  const action = actionEl.dataset.action;
+  if (action === "local") { state.mode = "local"; closeSheet(); render(); }
+  if (action === "shared") {
+    if (state.version == null) openCreate();
+    else { state.mode = "shared"; closeSheet(); render(); }
+  }
+  if (action === "create") openCreate();
+  if (action === "rename") openCreate(true);
+  if (action === "cancel-create") closeCreate();
+  if (action === "roster") openRoster();
+  if (action === "close-roster") closeRoster();
+  if (action === "sheet") openSheet();
+  if (action === "close-sheet") closeSheet();
+  if (action === "copy-link") showToast("Shared link copied ✓");
+  if (action === "copy-result") showToast("Numbered result copied ✓");
+  if (action === "copy-roster") showToast("Roster copied ✓");
+  if (action === "recheck") { state.members.forEach(member => member.eligible = true); render(); }
+  if (action === "order-all") { state.count = state.members.filter(member => member.eligible).length; render(); }
+  if (action === "spin") spin();
+  if (action === "delete") {
+    if (confirm(`Permanently delete “${state.wheelName}” and all Spin records?`)) {
+      state.mode = "local"; state.version = null; state.expiresAt = null; closeSheet(); render(); showToast("Shared Wheel deleted immediately");
+    }
+  }
+});
+
+document.addEventListener("change", event => {
+  if (event.target.matches('[data-action="count"]')) { state.count = Number(event.target.value); render(); }
+  if (event.target.matches('[data-action="auto-remove"]')) { state.autoRemove = event.target.checked; if (state.mode === "shared") state.version += 1; render(); }
+  if (event.target.matches("[data-member-index]")) {
+    state.members[Number(event.target.dataset.memberIndex)].eligible = event.target.checked;
+    if (state.mode === "shared") state.version += 1;
+    render();
+  }
+});
+
+document.addEventListener("click", event => {
+  const remove = event.target.closest("[data-remove-index]");
+  if (!remove) return;
+  state.members.splice(Number(remove.dataset.removeIndex), 1);
+  if (state.mode === "shared") state.version += 1;
+  render();
+});
+
+document.getElementById("create-modal").addEventListener("submit", event => {
+  event.preventDefault();
+  const name = document.getElementById("wheel-name").value.trim();
+  if (!name) return;
+  const rename = event.currentTarget.dataset.rename === "true";
+  state.wheelName = name;
+  if (rename) state.version += 1;
+  else { state.mode = "shared"; state.version = 1; state.expiresAt = "Sep 10, 2026, 10:30 AM"; }
+  closeCreate(); render(); showToast(rename ? "Wheel renamed" : "Shared Wheel created");
+});
+
+document.getElementById("create-backdrop").addEventListener("click", closeCreate);
+document.querySelector("[data-sheet-backdrop]").addEventListener("click", closeSheet);
+document.getElementById("variant-prev").addEventListener("click", () => cycleVariant(-1));
+document.getElementById("variant-next").addEventListener("click", () => cycleVariant(1));
+document.getElementById("state-button").addEventListener("click", () => document.getElementById("state-panel").classList.toggle("open"));
+document.addEventListener("keydown", event => {
+  if (event.target.matches("input,textarea,[contenteditable]")) return;
+  if (event.key === "ArrowLeft") cycleVariant(-1);
+  if (event.key === "ArrowRight") cycleVariant(1);
+  if (event.key === "Escape") { closeRoster(); closeCreate(); closeSheet(); }
+});
+
+render();
+</script>
+</body>
+</html>
