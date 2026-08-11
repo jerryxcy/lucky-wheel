@@ -38,9 +38,11 @@ names are user data and never pass through `t()`.
 
 ## Consequences
 
-- The server's error messages (400 responses) stay English-only, unaffected
-  by this work — they're a separate, nearly unreachable path from normal UI
-  flow, and translating them is explicitly out of scope.
+- The server's error messages stay English-only. The legacy 400 response is
+  nearly unreachable from its UI, while Shared API Problem Details expose a
+  stable problem `type` that the browser maps to EN / zh-Hant UI copy; unknown
+  problems fall back to the server's English `detail`. User-provided member and
+  wheel names are never translated.
 - Every UI string, including the ones drawn on `<canvas>` (which have no DOM
   node for `data-i18n` to target), must be read through `t()` rather than
   hardcoded — a redraw or a new notice that skips this will silently ship
