@@ -4,8 +4,9 @@
 
 A spin-wheel decision tool for teams. Build a roster, spin the wheel, and let
 it pick who's on-call this week — or draw a full order for who goes first.
-The whole thing runs from a single `java -jar`: no database, no build step, no
-setup beyond a JDK.
+Local Wheel runs from a single `java -jar`: no database, no build step, and no
+setup beyond a JDK. Optional Shared Wheel infrastructure can be enabled for
+server-side state without changing that default.
 
 <p align="center">
   <img src="docs/images/wheel.png" alt="The Lucky Wheel with seven members ready to spin" width="480">
@@ -21,7 +22,7 @@ in the stand-up.
 
 ## Quick start
 
-Requires **Java 21**. Either grab the pre-built jar or build from source.
+Requires **Java 21 or later**. Either grab the pre-built jar or build from source.
 
 **Download the released jar** (no build tools needed):
 
@@ -92,13 +93,18 @@ curl -s localhost:8080/api/spins \
 
 ## Design notes
 
-- **Stateless server, roster in the browser.** There is no database and no
-  server-side team model — the roster is kept in the browser's `localStorage`
-  and sent in full with every spin. The endpoint's only job is turning a member
-  list into a draw order. This keeps the server trivial and restart-safe, at the
-  cost of rosters being per-browser. The trade-off and its rejected alternatives
-  (H2 + JPA, in-memory `Map`) are recorded in
+- **Local stays stateless and zero-setup.** By default there is no DataSource,
+  migration, or server-side roster — the roster is kept in the browser's
+  `localStorage` and sent in full with every spin. The endpoint's only job is
+  turning a member list into a draw order. This keeps Local Wheel trivial and
+  restart-safe, at the cost of rosters being per-browser. The trade-off and its
+  original alternatives are recorded in
   [ADR-0001](docs/adr/0001-stateless-server-roster-in-browser.md).
+- **Shared infrastructure is explicit.** Setting
+  `LUCKY_WHEEL_SHARED_ENABLED=true` activates PostgreSQL, Flyway, and JPA.
+  Startup fails if PostgreSQL is unavailable or a migration fails; it never
+  silently falls back to Local-only behavior. Flyway owns schema changes and
+  Hibernate validates them. H2 is not used.
 - **The draw is a pure function.** Picking is `(members, count, RandomGenerator)
   → drawOrder` — a Fisher-Yates shuffle behind an injectable random source. That
   makes every property of a fair draw deterministically testable: exact count,
@@ -115,10 +121,62 @@ curl -s localhost:8080/api/spins \
 - **No build step.** The UI is static HTML + vanilla JS served from the jar —
   no bundler, no `node_modules`. `java -jar` is the complete artifact.
 
+## Shared infrastructure development
+
+The Shared Wheel user flow is delivered by later tickets. To run its database
+foundation while developing, start PostgreSQL from the repository root:
+
+```bash
+docker compose up -d postgres
+docker compose ps
+```
+
+Then start the application with Shared infrastructure enabled:
+
+```bash
+LUCKY_WHEEL_SHARED_ENABLED=true \
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/lucky_wheel \
+SPRING_DATASOURCE_USERNAME=lucky_wheel \
+SPRING_DATASOURCE_PASSWORD=lucky_wheel \
+./mvnw spring-boot:run
+```
+
+Stop the container while preserving the named
+`lucky-wheel-postgres-data` volume:
+
+```bash
+docker compose down
+```
+
+To permanently remove the development database as well:
+
+```bash
+docker compose down --volumes
+```
+
+## Build and test
+
+Both commands require Java 21 or later. Maven Enforcer stops the build during
+`validate` when an older Java version is active. The compiled application still
+targets Java 21.
+
+```bash
+# Fast tests and the executable jar; Docker is not required
+./mvnw package
+
+# Fast tests plus Testcontainers PostgreSQL integration tests
+./mvnw verify
+```
+
+Surefire owns `*Test`; Failsafe owns `*IT`. Integration tests use disposable
+PostgreSQL containers and the same Flyway migrations as development and
+production.
+
 ## Tech
 
-Java 21 · Spring Boot 3.5 (Web + Validation only — no JPA, H2, or Lombok) ·
-vanilla JS + `<canvas>` · Maven wrapper · GitHub Actions CI.
+Java 21 · Spring Boot 3.5 · Spring Web + Validation · optional Spring Data JPA,
+Flyway, and PostgreSQL · Testcontainers · no H2 or Lombok · vanilla JS +
+`<canvas>` · Maven wrapper · GitHub Actions CI.
 
 ## License
 
