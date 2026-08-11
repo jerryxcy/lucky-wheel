@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lucky_wheel
+      POSTGRES_USER: lucky_wheel
+      POSTGRES_PASSWORD: lucky_wheel
+    ports:
+      - "5432:5432"
+    volumes:
+      - lucky-wheel-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lucky_wheel -d lucky_wheel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  lucky-wheel-postgres-data:
+    name: lucky-wheel-postgres-data
