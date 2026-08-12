@@ -5,8 +5,9 @@
 A spin-wheel decision tool for teams. Build a roster, spin the wheel, and let
 it pick who's on-call this week — or draw a full order for who goes first.
 Local Wheel runs from a single `java -jar`: no database, no build step, and no
-setup beyond a JDK. Optional Shared Wheel infrastructure can be enabled for
-server-side state without changing that default.
+setup beyond a JDK. Optional Shared Wheel mode stores a named roster on the
+server and gives it a capability URL that another browser can open, without
+changing the zero-setup default.
 
 <p align="center">
   <img src="docs/images/wheel.png" alt="The Lucky Wheel with seven members ready to spin" width="480">
@@ -62,11 +63,18 @@ the toggle in the top bar switches it any time.
   final order.
 - **Auto-remove** — flip this on before spinning and picked members drop out of
   the next draw automatically, so a weekly rotation needs no bookkeeping.
+- **Shared Wheel** — when the server has Shared mode enabled, choose **Create
+  Shared Wheel — saved on server, accessible by link**, give the wheel a name,
+  and copy its URL from the Shared badge. Opening or refreshing that URL loads
+  the same ordered roster, eligibility, and auto-remove setting from the
+  server. Shared editing and spinning are delivered by the next tickets; this
+  first vertical slice deliberately keeps those controls read-only.
 
 ## API
 
-The server is a single stateless endpoint. The UI is just its first consumer —
-you can drive it directly.
+The original stateless spin endpoint remains unchanged. When Shared mode is
+enabled, the application also exposes capability discovery and Shared Wheel
+creation/read endpoints.
 
 **`POST /api/spins`**
 
@@ -91,6 +99,34 @@ curl -s localhost:8080/api/spins \
 # {"message":"Member names must be unique (after trimming whitespace)."}
 ```
 
+**`GET /api/capabilities`** is always available and does not touch the
+database:
+
+```json
+{ "sharedWheels": false }
+```
+
+**`POST /api/shared-wheels`** creates a named Shared Wheel from a complete
+Local snapshot. **`GET /api/shared-wheels/{wheelId}`** reopens the authoritative
+snapshot. Both endpoints exist only when Shared mode is enabled.
+
+```json
+{
+  "name": "On-call rotation",
+  "autoRemove": true,
+  "members": [
+    { "name": "Alice", "eligible": false },
+    { "name": "Bob", "eligible": true }
+  ]
+}
+```
+
+A successful create returns **201**, an API `Location` header, and the complete
+snapshot. The snapshot includes `id`, optimistic-lock `version`, the ordered
+`members`, nullable `latestSpin`, and nullable `expiresAt`. Shared API failures
+use RFC 9457 Problem Details (`application/problem+json`); the legacy spin
+endpoint keeps its original error format.
+
 ## Design notes
 
 - **Local stays stateless and zero-setup.** By default there is no DataSource,
@@ -111,20 +147,19 @@ curl -s localhost:8080/api/spins \
   no duplicates, a subset of the input, reproducibility under a fixed seed, a
   full permutation when `count` equals the roster size, and a large-sample
   uniformity check.
-- **Two test seams.** The pure function is tested directly with a seeded random
-  source; the HTTP contract (the 200 shape and every 400 case) is tested through
-  `MockMvc`. Tests assert external behaviour only, so refactoring never breaks
-  them.
+- **Tests cross the real boundaries.** The pure function uses deterministic
+  unit tests, the legacy HTTP contract uses `MockMvc`, Shared persistence and
+  migrations run against disposable PostgreSQL, and Playwright exercises the
+  create/copy/open/refresh journey in a real browser.
 - **Reveal is playback, not decision.** The API returns the whole draw order in
   one call; the wheel animation just replays that already-decided result, and
   skipping it changes nothing about the outcome.
 - **No build step.** The UI is static HTML + vanilla JS served from the jar —
   no bundler, no `node_modules`. `java -jar` is the complete artifact.
 
-## Shared infrastructure development
+## Shared Wheel development
 
-The Shared Wheel user flow is delivered by later tickets. To run its database
-foundation while developing, start PostgreSQL from the repository root:
+To enable Shared Wheel locally, start PostgreSQL from the repository root:
 
 ```bash
 docker compose up -d postgres
@@ -160,23 +195,34 @@ Both commands require Java 21 or later. Maven Enforcer stops the build during
 `validate` when an older Java version is active. The compiled application still
 targets Java 21.
 
+Install the browser runtime once before the integration suite:
+
+```bash
+./mvnw -q exec:java \
+  -Dexec.mainClass=com.microsoft.playwright.CLI \
+  -Dexec.classpathScope=test \
+  -Dexec.args="install chromium"
+```
+
 ```bash
 # Fast tests and the executable jar; Docker is not required
 ./mvnw package
 
-# Fast tests plus Testcontainers PostgreSQL integration tests
+# Fast tests plus PostgreSQL and real-browser integration tests
 ./mvnw verify
 ```
 
 Surefire owns `*Test`; Failsafe owns `*IT`. Integration tests use disposable
 PostgreSQL containers and the same Flyway migrations as development and
-production.
+production. They therefore require a running Docker daemon and the Playwright
+Chromium runtime. CI installs Chromium with its Linux system dependencies before
+running `./mvnw verify`.
 
 ## Tech
 
 Java 21 · Spring Boot 3.5 · Spring Web + Validation · optional Spring Data JPA,
 Flyway, and PostgreSQL · Testcontainers · no H2 or Lombok · vanilla JS +
-`<canvas>` · Maven wrapper · GitHub Actions CI.
+`<canvas>` · Playwright · Maven wrapper · GitHub Actions CI.
 
 ## License
 

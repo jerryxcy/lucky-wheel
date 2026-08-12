@@ -54,7 +54,11 @@ Local browser state or the legacy stateless Spin contract.
    `/shared-wheels/{wheelId}`. It does not alter the Local Wheel in that
    browser.
 4. A failed create leaves the Local Wheel unchanged.
-5. The Shared view provides `Copy link`; sharing is not a blocking step.
+5. On the first view after creation, the Wheel mode sheet opens once and warns
+   that there is no account or Shared Wheel list, so the user should copy the
+   link or bookmark it with the browser shortcut. Later views keep `Copy link`
+   available without repeating the creation reminder; sharing is not a
+   blocking step.
 6. Opening the full URL in another browser loads the same authoritative state.
    There is no short code or separate join-by-ID UI.
 
@@ -80,11 +84,11 @@ The selected UI direction is projection-first **Stage badge**: an always-visible
 badge in the upper-left identifies Local versus Shared mode and, in Shared
 mode, the current Wheel name and live connection state. Activating it opens a
 command sheet containing mode choice, share link, expiry, rename, roster, and
-permanent deletion. Local mode keeps a visible `Create Shared Wheel — saved on
-server, accessible by link` callout on the stage, so creation is not hidden in
-the sheet. This decision came from the three-variant throwaway Shared Wheel UI
-prototype; production code must reimplement the direction rather than promote
-prototype code.
+permanent deletion. Local users create a Shared Wheel through the Shared option
+in this command sheet; the stage does not show a second creation callout. This
+direction came from the three-variant throwaway Shared Wheel UI prototype, with
+the badge retained as the single production entry point. Production code must
+reimplement the direction rather than promote prototype code.
 
 `Live updates connected` and `Reconnecting` describe the SSE connection, not
 whether REST is usable. Initial page load, reconnect, window focus, SSE

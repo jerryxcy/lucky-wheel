@@ -4,12 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="appTitle">Lucky Wheel 抽籤轉盤</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/style.css">
 </head>
-<body>
+<body class="booting">
     <div id="stage">
         <header id="top-bar">
-            <h1>LUCKY WHEEL</h1>
+            <div id="stage-identity">
+                <h1 class="visually-hidden">LUCKY WHEEL</h1>
+                <button type="button" id="mode-badge" aria-haspopup="dialog">
+                    <span id="mode-icon" aria-hidden="true">◉</span>
+                    <span id="mode-badge-copy">
+                        <strong id="mode-label" data-i18n="localModeTitle">Local Wheel</strong>
+                        <small id="mode-subtitle" data-i18n="localModeScope">Only in this browser</small>
+                    </span>
+                    <span id="mode-chevron" aria-hidden="true">▾</span>
+                </button>
+            </div>
             <div id="top-bar-controls">
                 <div id="language-toggle">
                     <button type="button" id="language-menu-button" aria-haspopup="true" aria-expanded="false" aria-controls="language-menu" aria-label="Language / 語言">
@@ -26,6 +36,11 @@
             </div>
         </header>
 
+        <section id="shared-wheel-unavailable" class="empty-state" hidden>
+            <h2 data-i18n="sharedUnavailableHeading">Shared Wheel unavailable</h2>
+            <p data-i18n="sharedUnavailableBody">This link is invalid, expired, or no longer available.</p>
+        </section>
+
         <div id="wheel-area">
             <p id="pick-banner" aria-live="polite"></p>
             <div id="wheel-box">
@@ -35,6 +50,10 @@
         </div>
 
         <div id="bottom-bar">
+            <div id="bottom-bar-notices">
+                <p id="spin-disabled-reason" class="notice" hidden></p>
+                <p id="spin-error" class="notice" role="alert" hidden></p>
+            </div>
             <div id="spin-controls">
                 <label for="count-select" data-i18n="countLabel">抽出人數</label>
                 <select id="count-select"></select>
@@ -47,8 +66,6 @@
             <button type="button" id="spin-button" class="spin-button" data-i18n="spinButton">SPIN</button>
             <button type="button" id="skip-button" class="ghost-button" hidden data-i18n="skipButton">跳過</button>
         </div>
-        <p id="spin-disabled-reason" class="notice" hidden></p>
-        <p id="spin-error" class="notice" role="alert" hidden></p>
     </div>
 
     <div id="drawer-backdrop" hidden></div>
@@ -100,6 +117,57 @@
         <button type="button" id="close-overlay-button" data-i18n="close">關閉</button>
     </div>
 
-    <script src="app.js"></script>
+    <dialog id="create-shared-wheel-dialog" class="command-sheet" aria-labelledby="create-shared-wheel-heading">
+        <form id="create-shared-wheel-form">
+            <h2 id="create-shared-wheel-heading" data-i18n="createSharedWheelHeading">Create Shared Wheel</h2>
+            <p data-i18n="createSharedWheelExplanation">Save this roster on the server and open a shareable link.</p>
+            <label for="shared-wheel-name-input" data-i18n="sharedWheelNameLabel">Wheel name</label>
+            <input id="shared-wheel-name-input" name="wheelName" type="text" maxlength="80" required autocomplete="off">
+            <p id="create-shared-wheel-error" class="notice" role="alert" hidden></p>
+            <div class="command-sheet-actions">
+                <button type="button" id="cancel-create-shared-wheel" class="ghost-button" data-i18n="cancel">Cancel</button>
+                <button type="submit" id="confirm-create-shared-wheel" data-i18n="create">Create</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="shared-wheel-command-sheet" class="command-sheet side-command-sheet" aria-labelledby="shared-wheel-command-heading">
+        <div id="command-sheet-heading-row">
+            <h2 id="shared-wheel-command-heading" data-i18n="wheelModeHeading">Wheel mode</h2>
+            <button type="button" id="close-shared-wheel-command" class="icon-button" data-i18n-aria-label="closeWheelModeAria" aria-label="Close Wheel mode">×</button>
+        </div>
+
+        <button type="button" id="local-wheel-mode" class="sheet-mode">
+            <span class="sheet-mode-icon" aria-hidden="true">◉</span>
+            <span>
+                <strong data-i18n="localModeTitle">Local Wheel</strong>
+                <small data-i18n="localModeScope">Only in this browser</small>
+            </span>
+        </button>
+        <button type="button" id="shared-wheel-mode" class="sheet-mode">
+            <span class="sheet-mode-icon" aria-hidden="true">↗</span>
+            <span>
+                <strong data-i18n="sharedModeTitle">Shared Wheel</strong>
+                <small data-i18n="sharedModeScope">Saved on server, accessible by link</small>
+            </span>
+        </button>
+
+        <section id="shared-wheel-command-detail" class="command-sheet-detail" hidden>
+            <span class="command-sheet-eyebrow" data-i18n="currentSharedWheel">Current Shared Wheel</span>
+            <h3 id="shared-wheel-command-name"></h3>
+            <div id="shared-wheel-created-reminder" class="shared-wheel-created-reminder" role="status" hidden>
+                <strong data-i18n="sharedWheelCreatedHeading">Shared Wheel created</strong>
+                <p data-i18n="sharedWheelCreatedReminder">There is no account or Shared Wheel list. Save this link now; the service cannot recover it for you if it is lost.</p>
+                <small data-i18n="sharedWheelBookmarkHint">Tip: press Command+D on Mac or Ctrl+D on Windows and Linux to bookmark it.</small>
+            </div>
+            <p class="shared-wheel-scope" data-i18n="sharedWheelLinkExplanation">Anyone with this link can open this wheel.</p>
+            <p id="shared-wheel-expiry" hidden></p>
+            <div class="command-sheet-actions">
+                <button type="button" id="copy-shared-wheel-link" data-i18n="copySharedWheelLink">Copy link</button>
+            </div>
+        </section>
+    </dialog>
+
+    <script src="/app.js"></script>
 </body>
 </html>
