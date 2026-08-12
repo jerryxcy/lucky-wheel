@@ -15,4 +15,6 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Install Playwright Chromium
+        run: ./mvnw -q exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.classpathScope=test -Dexec.args="install --with-deps chromium"
       - run: ./mvnw verify

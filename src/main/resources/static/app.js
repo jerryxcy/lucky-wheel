@@ -38,6 +38,36 @@ const WHEEL_LABEL_DARK = "#14172b";
 const STRINGS = {
     en: {
         appTitle: "Lucky Wheel",
+        localModeTitle: "Local Wheel",
+        localModeScope: "Only in this browser",
+        sharedModeTitle: "Shared Wheel",
+        sharedModeScope: "Saved on server, accessible by link",
+        sharedBadgeScope: "Shared Wheel · saved on server",
+        sharedUnavailableBadgeScope: "This Shared Wheel is unavailable",
+        createSharedWheelHeading: "Create Shared Wheel",
+        createSharedWheelExplanation: "Save this roster on the server and open a shareable link.",
+        wheelModeHeading: "Wheel mode",
+        closeWheelModeAria: "Close Wheel mode",
+        currentSharedWheel: "Current Shared Wheel",
+        sharedWheelCreatedHeading: "Shared Wheel created",
+        sharedWheelCreatedReminder: "There is no account or Shared Wheel list. Save this link now; the service cannot recover it for you if it is lost.",
+        sharedWheelBookmarkHint: "Tip: press Command+D on Mac or Ctrl+D on Windows and Linux to bookmark it.",
+        sharedWheelNameLabel: "Wheel name",
+        cancel: "Cancel",
+        create: "Create",
+        sharedWheelLabel: "Shared Wheel",
+        sharedWheelLinkExplanation: "Anyone with this link can open this wheel.",
+        copySharedWheelLink: "Copy link",
+        sharedLinkCopied: "Link copied ✓",
+        sharedUnavailableHeading: "Shared Wheel unavailable",
+        sharedUnavailableBody: "This link is invalid, expired, or no longer available.",
+        problemSharedWheelNotFound: "This Shared Wheel is no longer available.",
+        problemSharedWheelValidation: "Check the Wheel name and roster, then try again.",
+        problemSharedWheelInvalidRequest: "The Shared Wheel request is invalid.",
+        problemSharedApiError: "The Shared Wheel request could not be completed — please try again.",
+        sharedReadOnlyNotice: "Shared editing and spinning arrive in the next implementation tickets.",
+        createSharedWheelGenericError: "Could not create the Shared Wheel — please try again.",
+        sharedWheelExpiry: (p) => `Expires ${p.date}`,
         drawerToggle: "⚙ Roster",
         countLabel: "Number to pick",
         orderEveryone: "Order everyone",
@@ -77,6 +107,36 @@ const STRINGS = {
     },
     "zh-Hant": {
         appTitle: "Lucky Wheel 抽籤轉盤",
+        localModeTitle: "Local Wheel",
+        localModeScope: "僅儲存在這個瀏覽器",
+        sharedModeTitle: "Shared Wheel 共享轉盤",
+        sharedModeScope: "儲存在伺服器，可透過連結存取",
+        sharedBadgeScope: "Shared Wheel · 儲存在伺服器",
+        sharedUnavailableBadgeScope: "這個 Shared Wheel 無法使用",
+        createSharedWheelHeading: "建立 Shared Wheel",
+        createSharedWheelExplanation: "將目前名單儲存在伺服器，並開啟可分享的連結。",
+        wheelModeHeading: "轉盤模式",
+        closeWheelModeAria: "關閉轉盤模式",
+        currentSharedWheel: "目前的 Shared Wheel",
+        sharedWheelCreatedHeading: "Shared Wheel 已建立",
+        sharedWheelCreatedReminder: "這個服務沒有帳號或 Shared Wheel 清單。請立即保存此連結；遺失後服務無法替你找回。",
+        sharedWheelBookmarkHint: "提示：Mac 按 Command+D，Windows 或 Linux 按 Ctrl+D，即可加入書籤。",
+        sharedWheelNameLabel: "轉盤名稱",
+        cancel: "取消",
+        create: "建立",
+        sharedWheelLabel: "Shared Wheel 共享轉盤",
+        sharedWheelLinkExplanation: "任何取得這個連結的人都可以開啟此轉盤。",
+        copySharedWheelLink: "複製連結",
+        sharedLinkCopied: "已複製連結 ✓",
+        sharedUnavailableHeading: "Shared Wheel 無法使用",
+        sharedUnavailableBody: "這個連結無效、已過期，或已經無法使用。",
+        problemSharedWheelNotFound: "這個 Shared Wheel 已經無法使用。",
+        problemSharedWheelValidation: "請檢查轉盤名稱與名單後再試一次。",
+        problemSharedWheelInvalidRequest: "Shared Wheel 的請求內容無效。",
+        problemSharedApiError: "無法完成 Shared Wheel 請求，請再試一次。",
+        sharedReadOnlyNotice: "Shared Wheel 的修改與抽選會由接下來的 implementation tickets 完成。",
+        createSharedWheelGenericError: "無法建立 Shared Wheel，請再試一次。",
+        sharedWheelExpiry: (p) => `到期時間：${p.date}`,
         drawerToggle: "⚙ 名單",
         countLabel: "抽出人數",
         orderEveryone: "全員排序",
@@ -217,6 +277,7 @@ function applyLanguage(lang) {
         spinError.textContent = t(spinErrorState.key, spinErrorState.params);
     }
 
+    renderWheelMode();
     render();
 }
 
@@ -232,6 +293,20 @@ let roster = loadRoster();
  */
 let autoRemove = loadAutoRemove();
 
+/** "local", "shared", or "shared-unavailable". */
+let wheelMode = "local";
+
+/** The authoritative server snapshot while in Shared Wheel mode. */
+let sharedWheelSnapshot = null;
+
+/** Capability flag controls whether Shared creation appears in the Local mode sheet. */
+let sharedWheelsEnabled = false;
+
+/** Show the save-link reminder only on the first page reached after creation. */
+let showSharedWheelCreatedReminder = false;
+
+const CREATED_SHARED_WHEEL_KEY = "luckyWheel.createdSharedWheelId";
+
 /** True while a reveal (per-pick playback sequence) is in progress. */
 let spinning = false;
 
@@ -242,6 +317,12 @@ let activeSkipToken = null;
 const languageMenuButton = document.getElementById("language-menu-button");
 const languageMenu = document.getElementById("language-menu");
 const languageCurrentLabel = document.getElementById("language-current");
+
+const modeBadge = document.getElementById("mode-badge");
+const modeIcon = document.getElementById("mode-icon");
+const modeLabel = document.getElementById("mode-label");
+const modeSubtitle = document.getElementById("mode-subtitle");
+const sharedWheelUnavailable = document.getElementById("shared-wheel-unavailable");
 
 const drawerToggle = document.getElementById("drawer-toggle");
 const drawerClose = document.getElementById("drawer-close");
@@ -277,6 +358,30 @@ const wheelCanvas = document.getElementById("wheel-canvas");
 const resultOverlay = document.getElementById("result-overlay");
 const drawOrderList = document.getElementById("draw-order-list");
 const closeOverlayButton = document.getElementById("close-overlay-button");
+
+const createSharedWheelDialog = document.getElementById("create-shared-wheel-dialog");
+const createSharedWheelForm = document.getElementById("create-shared-wheel-form");
+const sharedWheelNameInput = document.getElementById("shared-wheel-name-input");
+const cancelCreateSharedWheel = document.getElementById("cancel-create-shared-wheel");
+const confirmCreateSharedWheel = document.getElementById("confirm-create-shared-wheel");
+const createSharedWheelError = document.getElementById("create-shared-wheel-error");
+const sharedWheelCommandSheet = document.getElementById("shared-wheel-command-sheet");
+const localWheelMode = document.getElementById("local-wheel-mode");
+const sharedWheelMode = document.getElementById("shared-wheel-mode");
+const sharedWheelCommandDetail = document.getElementById("shared-wheel-command-detail");
+const sharedWheelCommandName = document.getElementById("shared-wheel-command-name");
+const sharedWheelCreatedReminder = document.getElementById("shared-wheel-created-reminder");
+const sharedWheelExpiry = document.getElementById("shared-wheel-expiry");
+const closeSharedWheelCommand = document.getElementById("close-shared-wheel-command");
+const copySharedWheelLink = document.getElementById("copy-shared-wheel-link");
+
+function isSharedMode() {
+    return wheelMode === "shared";
+}
+
+function localWheelMutationLocked() {
+    return spinning || isSharedMode();
+}
 
 // ---- Persistence (Roster lives in the browser) ----
 
@@ -326,7 +431,7 @@ function isDuplicateName(name) {
 }
 
 function addMember(rawName) {
-    if (spinning) return;
+    if (localWheelMutationLocked()) return;
     const name = normalizeName(rawName);
     if (name === "") {
         showAddMemberNotice("pleaseEnterName");
@@ -343,14 +448,14 @@ function addMember(rawName) {
 }
 
 function removeMember(name) {
-    if (spinning) return;
+    if (localWheelMutationLocked()) return;
     roster = roster.filter((member) => member.name !== name);
     saveRoster();
     render();
 }
 
 function setEligible(name, eligible) {
-    if (spinning) return;
+    if (localWheelMutationLocked()) return;
     const member = roster.find((m) => m.name === name);
     if (!member) return;
     member.eligible = eligible;
@@ -368,7 +473,7 @@ function eligibleMembers() {
  * became ineligible (manual uncheck or auto-remove).
  */
 function recheckAll() {
-    if (spinning) return;
+    if (localWheelMutationLocked()) return;
     for (const member of roster) {
         member.eligible = true;
     }
@@ -412,7 +517,7 @@ function splitPastedNames(text) {
  * pasted text itself. Reports how many were added vs. skipped.
  */
 function importBulk(rawText) {
-    if (spinning) return;
+    if (localWheelMutationLocked()) return;
     const names = splitPastedNames(rawText);
     if (names.length === 0) {
         showBulkImportNotice("bulkImportEmpty");
@@ -719,10 +824,13 @@ function render() {
 }
 
 function renderRosterToolsAvailability() {
-    bulkImportTextarea.disabled = spinning;
-    bulkImportButton.disabled = spinning;
-    recheckAllButton.disabled = spinning;
-    autoRemoveToggle.disabled = spinning;
+    const locked = localWheelMutationLocked();
+    memberNameInput.disabled = locked;
+    addMemberForm.querySelector("button[type='submit']").disabled = locked;
+    bulkImportTextarea.disabled = locked;
+    bulkImportButton.disabled = locked;
+    recheckAllButton.disabled = locked;
+    autoRemoveToggle.disabled = locked;
 }
 
 function renderMemberList() {
@@ -736,7 +844,7 @@ function renderMemberList() {
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = member.eligible;
-        checkbox.disabled = spinning;
+        checkbox.disabled = localWheelMutationLocked();
         checkbox.setAttribute("aria-label", t("eligibleAria", { name: member.name }));
         checkbox.addEventListener("change", () => setEligible(member.name, checkbox.checked));
 
@@ -747,7 +855,7 @@ function renderMemberList() {
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.textContent = t("removeButtonText");
-        removeButton.disabled = spinning;
+        removeButton.disabled = localWheelMutationLocked();
         removeButton.setAttribute("aria-label", t("removeAria", { name: member.name }));
         removeButton.addEventListener("click", () => removeMember(member.name));
 
@@ -768,8 +876,8 @@ function renderCountOptions() {
         countSelect.appendChild(option);
     }
 
-    countSelect.disabled = spinning || eligibleCount === 0;
-    orderEveryoneButton.disabled = spinning || eligibleCount === 0;
+    countSelect.disabled = localWheelMutationLocked() || eligibleCount === 0;
+    orderEveryoneButton.disabled = localWheelMutationLocked() || eligibleCount === 0;
 
     if (eligibleCount > 0) {
         const restoredValue = Number(previousValue);
@@ -782,13 +890,16 @@ function renderCountOptions() {
 function renderSpinAvailability() {
     const eligibleCount = eligibleMembers().length;
     let reason = null;
-    if (roster.length === 0) {
+    if (isSharedMode()) {
+        reason = t("sharedReadOnlyNotice");
+    } else if (roster.length === 0) {
         reason = t("spinDisabledEmptyRoster");
     } else if (eligibleCount === 0) {
         reason = t("spinDisabledNoEligible");
     }
 
     spinButton.disabled = spinning || reason !== null;
+    spinDisabledReason.classList.toggle("info-notice", isSharedMode());
     if (reason) {
         spinDisabledReason.textContent = reason;
         spinDisabledReason.hidden = false;
@@ -866,6 +977,7 @@ function setSpinning(isSpinning) {
 // ---- Spin ----
 
 async function spin() {
+    if (isSharedMode()) return;
     hideSpinError();
     const members = eligibleMembers().map((member) => member.name);
     const count = Number(countSelect.value);
@@ -1003,7 +1115,7 @@ orderEveryoneButton.addEventListener("click", () => {
 
 autoRemoveToggle.checked = autoRemove;
 autoRemoveToggle.addEventListener("change", () => {
-    if (spinning) return;
+    if (localWheelMutationLocked()) return;
     autoRemove = autoRemoveToggle.checked;
     saveAutoRemove();
 });
@@ -1021,5 +1133,195 @@ closeOverlayButton.addEventListener("click", () => {
     setSpinning(false);
 });
 
+// ---- Local / Shared Wheel mode ----
+
+function renderWheelMode() {
+    const shared = wheelMode !== "local";
+    modeIcon.textContent = shared ? "●" : "◉";
+    modeLabel.textContent = isSharedMode()
+        ? sharedWheelSnapshot.name
+        : t(shared ? "sharedModeTitle" : "localModeTitle");
+    modeSubtitle.textContent = t(
+        wheelMode === "shared-unavailable"
+            ? "sharedUnavailableBadgeScope"
+            : (shared ? "sharedBadgeScope" : "localModeScope")
+    );
+    modeBadge.classList.toggle("shared", shared);
+    modeBadge.setAttribute("aria-haspopup", "dialog");
+    sharedWheelCommandName.textContent = sharedWheelSnapshot?.name || "";
+
+    localWheelMode.classList.toggle("active", !shared);
+    sharedWheelMode.classList.toggle("active", shared);
+    sharedWheelMode.hidden = wheelMode === "local" && !sharedWheelsEnabled;
+    sharedWheelCommandDetail.hidden = !isSharedMode();
+    sharedWheelCreatedReminder.hidden = !showSharedWheelCreatedReminder;
+
+    sharedWheelUnavailable.hidden = wheelMode !== "shared-unavailable";
+    document.body.classList.toggle("shared-unavailable", wheelMode === "shared-unavailable");
+
+    if (sharedWheelSnapshot?.expiresAt) {
+        const localDate = new Date(sharedWheelSnapshot.expiresAt).toLocaleString(currentLanguage);
+        sharedWheelExpiry.textContent = t("sharedWheelExpiry", { date: localDate });
+        sharedWheelExpiry.hidden = false;
+    } else {
+        sharedWheelExpiry.hidden = true;
+        sharedWheelExpiry.textContent = "";
+    }
+}
+
+function openCreateSharedWheelDialog() {
+    createSharedWheelError.hidden = true;
+    createSharedWheelError.textContent = "";
+    sharedWheelNameInput.value = "";
+    createSharedWheelDialog.showModal();
+    sharedWheelNameInput.focus();
+}
+
+function sharedProblemMessage(problem) {
+    const knownTypes = {
+        "https://github.com/jerryxcy/lucky-wheel/problems/shared-wheel-not-found":
+            "problemSharedWheelNotFound",
+        "https://github.com/jerryxcy/lucky-wheel/problems/shared-wheel-validation":
+            "problemSharedWheelValidation",
+        "https://github.com/jerryxcy/lucky-wheel/problems/shared-wheel-invalid-request":
+            "problemSharedWheelInvalidRequest",
+        "https://github.com/jerryxcy/lucky-wheel/problems/shared-api-error":
+            "problemSharedApiError",
+    };
+    const translationKey = knownTypes[problem?.type];
+    if (translationKey) return t(translationKey);
+    return problem?.detail || t("createSharedWheelGenericError");
+}
+
+async function createSharedWheel() {
+    createSharedWheelError.hidden = true;
+    confirmCreateSharedWheel.disabled = true;
+    const request = {
+        name: sharedWheelNameInput.value,
+        autoRemove,
+        members: roster.map((member) => ({ ...member })),
+    };
+
+    try {
+        const response = await fetch("/api/shared-wheels", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json, application/problem+json",
+            },
+            body: JSON.stringify(request),
+        });
+        if (!response.ok) {
+            const problem = await response.json().catch(() => null);
+            throw new Error(sharedProblemMessage(problem));
+        }
+        const snapshot = await response.json();
+        try {
+            sessionStorage.setItem(CREATED_SHARED_WHEEL_KEY, snapshot.id);
+        } catch (error) {
+            console.warn("Could not remember newly created Shared Wheel:", error);
+        }
+        window.location.assign(`/shared-wheels/${snapshot.id}`);
+    } catch (error) {
+        createSharedWheelError.textContent = error.message || t("createSharedWheelGenericError");
+        createSharedWheelError.hidden = false;
+        confirmCreateSharedWheel.disabled = false;
+    }
+}
+
+async function copySharedWheelUrl() {
+    const url = window.location.href;
+    try {
+        await navigator.clipboard.writeText(url);
+        copySharedWheelLink.textContent = t("sharedLinkCopied");
+        setTimeout(() => {
+            copySharedWheelLink.textContent = t("copySharedWheelLink");
+        }, 1200);
+    } catch (error) {
+        window.prompt(t("sharedWheelLinkExplanation"), url);
+    }
+}
+
+async function bootstrapWheel() {
+    // Match the route shape before validating the ID. A malformed or stale
+    // Shared URL must stay in the Shared unavailable state; it must never
+    // silently turn into a Local Wheel just because its ID is invalid.
+    const match = window.location.pathname.match(/^\/shared-wheels\/([^/]+)\/?$/);
+
+    if (match) {
+        wheelMode = "shared-unavailable";
+        renderWheelMode();
+        try {
+            const response = await fetch(`/api/shared-wheels/${encodeURIComponent(match[1])}`, {
+                headers: { Accept: "application/json, application/problem+json" },
+            });
+            if (!response.ok) throw new Error("Shared Wheel unavailable");
+            sharedWheelSnapshot = await response.json();
+            wheelMode = "shared";
+            try {
+                showSharedWheelCreatedReminder =
+                    sessionStorage.getItem(CREATED_SHARED_WHEEL_KEY) === sharedWheelSnapshot.id;
+                if (showSharedWheelCreatedReminder) {
+                    sessionStorage.removeItem(CREATED_SHARED_WHEEL_KEY);
+                }
+            } catch (error) {
+                console.warn("Could not read Shared Wheel creation state:", error);
+            }
+            roster = sharedWheelSnapshot.members.map((member) => ({ ...member }));
+            autoRemove = sharedWheelSnapshot.autoRemove;
+            autoRemoveToggle.checked = autoRemove;
+        } catch (error) {
+            console.error("Failed to open Shared Wheel:", error);
+            wheelMode = "shared-unavailable";
+        }
+    } else {
+        wheelMode = "local";
+        try {
+            const response = await fetch("/api/capabilities", {
+                headers: { Accept: "application/json" },
+            });
+            if (response.ok) {
+                sharedWheelsEnabled = (await response.json()).sharedWheels === true;
+            }
+        } catch (error) {
+            console.error("Failed to load capabilities:", error);
+        }
+    }
+
+    renderWheelMode();
+    render();
+    document.body.classList.remove("booting");
+    if (showSharedWheelCreatedReminder) {
+        sharedWheelCommandSheet.showModal();
+    }
+}
+
+cancelCreateSharedWheel.addEventListener("click", () => createSharedWheelDialog.close());
+createSharedWheelForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createSharedWheel();
+});
+modeBadge.addEventListener("click", () => {
+    sharedWheelCommandSheet.showModal();
+});
+closeSharedWheelCommand.addEventListener("click", () => sharedWheelCommandSheet.close());
+localWheelMode.addEventListener("click", () => {
+    if (wheelMode === "local") {
+        sharedWheelCommandSheet.close();
+        return;
+    }
+    window.location.assign("/");
+});
+sharedWheelMode.addEventListener("click", () => {
+    if (isSharedMode()) {
+        sharedWheelCommandSheet.close();
+        return;
+    }
+    sharedWheelCommandSheet.close();
+    openCreateSharedWheelDialog();
+});
+copySharedWheelLink.addEventListener("click", copySharedWheelUrl);
+
 // ---- Initial render ----
 applyLanguage(detectInitialLanguage());
+bootstrapWheel();

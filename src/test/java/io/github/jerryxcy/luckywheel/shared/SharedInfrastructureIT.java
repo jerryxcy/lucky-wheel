@@ -38,9 +38,11 @@ class SharedInfrastructureIT {
             assertThat(connection.getMetaData().getDatabaseProductName()).isEqualTo("PostgreSQL");
         }
         assertThat(flyway.info().applied())
-                .singleElement()
-                .satisfies(migration -> assertThat(migration.getDescription())
-                        .isEqualTo("shared infrastructure baseline"));
+                .extracting(migration -> migration.getDescription())
+                .containsExactly(
+                        "shared infrastructure baseline",
+                        "create shared wheel"
+                );
         assertThat(entityManagerFactory.isOpen()).isTrue();
     }
 }
