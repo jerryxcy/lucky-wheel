@@ -82,8 +82,10 @@ class SharedWheelApiIT {
         assertThat(createdSnapshot.required("autoRemove").booleanValue()).isTrue();
         assertThat(createdSnapshot.required("members").get(0).required("name").textValue()).isEqualTo("Alice");
         assertThat(createdSnapshot.required("members").get(0).required("eligible").booleanValue()).isFalse();
+        assertThat(createdSnapshot.required("members").get(0).has("id")).isFalse();
         assertThat(createdSnapshot.required("members").get(1).required("name").textValue()).isEqualTo("Bob");
         assertThat(createdSnapshot.required("members").get(1).required("eligible").booleanValue()).isTrue();
+        assertThat(createdSnapshot.required("members").get(1).has("id")).isFalse();
         assertThat(createdSnapshot.required("latestSpin").isNull()).isTrue();
         assertThat(createdSnapshot.required("expiresAt").isNull()).isTrue();
 
