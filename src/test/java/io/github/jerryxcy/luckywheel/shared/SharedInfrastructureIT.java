@@ -41,7 +41,8 @@ class SharedInfrastructureIT {
                 .extracting(migration -> migration.getDescription())
                 .containsExactly(
                         "shared infrastructure baseline",
-                        "create shared wheel"
+                        "create shared wheel",
+                        "defer shared roster uniqueness"
                 );
         assertThat(entityManagerFactory.isOpen()).isTrue();
     }

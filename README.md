@@ -67,14 +67,15 @@ the toggle in the top bar switches it any time.
   Shared Wheel — saved on server, accessible by link**, give the wheel a name,
   and copy its URL from the Shared badge. Opening or refreshing that URL loads
   the same ordered roster, eligibility, and auto-remove setting from the
-  server. Shared editing and spinning are delivered by the next tickets; this
-  first vertical slice deliberately keeps those controls read-only.
+  server. Roster changes, eligibility, re-check-all, auto-remove, bulk import,
+  and renaming are saved back to the same Shared Wheel. Shared spinning is
+  delivered by a later ticket.
 
 ## API
 
 The original stateless spin endpoint remains unchanged. When Shared mode is
 enabled, the application also exposes capability discovery and Shared Wheel
-creation/read endpoints.
+creation/read/update endpoints.
 
 **`POST /api/spins`**
 
@@ -108,7 +109,9 @@ database:
 
 **`POST /api/shared-wheels`** creates a named Shared Wheel from a complete
 Local snapshot. **`GET /api/shared-wheels/{wheelId}`** reopens the authoritative
-snapshot. Both endpoints exist only when Shared mode is enabled.
+snapshot. **`PUT /api/shared-wheels/{wheelId}`** replaces the mutable aggregate
+using the version the client expects to change. These endpoints exist only
+when Shared mode is enabled.
 
 ```json
 {
@@ -126,6 +129,27 @@ snapshot. The snapshot includes `id`, optimistic-lock `version`, the ordered
 `members`, nullable `latestSpin`, and nullable `expiresAt`. Shared API failures
 use RFC 9457 Problem Details (`application/problem+json`); the legacy spin
 endpoint keeps its original error format.
+
+An update sends the complete mutable state; server-owned Spin fields are not
+accepted:
+
+```json
+{
+  "expectedVersion": 3,
+  "name": "On-call rotation",
+  "autoRemove": true,
+  "members": [
+    { "name": "Alice", "eligible": true },
+    { "name": "Bob", "eligible": false }
+  ]
+}
+```
+
+A changed aggregate returns **200** with the committed snapshot and advances
+the root version once. An identical request at the current version is a no-op
+and keeps that version. A stale `expectedVersion` returns **409 Conflict** with
+Problem Details and a `currentVersion` extension; the UI loads the latest
+snapshot and asks the user to review it and retry manually.
 
 ## Design notes
 
@@ -150,7 +174,7 @@ endpoint keeps its original error format.
 - **Tests cross the real boundaries.** The pure function uses deterministic
   unit tests, the legacy HTTP contract uses `MockMvc`, Shared persistence and
   migrations run against disposable PostgreSQL, and Playwright exercises the
-  create/copy/open/refresh journey in a real browser.
+  create/edit/conflict/copy/open/refresh journey in a real browser.
 - **Reveal is playback, not decision.** The API returns the whole draw order in
   one call; the wheel animation just replays that already-decided result, and
   skipping it changes nothing about the outcome.

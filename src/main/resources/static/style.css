@@ -509,6 +509,25 @@ body.shared-unavailable #drawer-toggle {
     font-size: 1.2rem;
 }
 
+.rename-shared-wheel-form > div {
+    display: flex;
+    gap: 0.55rem;
+}
+
+.rename-shared-wheel-form input {
+    flex: 1;
+    min-width: 0;
+}
+
+.rename-shared-wheel-form button {
+    border: 0;
+    border-radius: 10px;
+    padding: 0.6rem 0.85rem;
+    color: var(--accent-ink);
+    background: var(--accent);
+    font-weight: 700;
+}
+
 .shared-wheel-created-reminder {
     margin: 0.8rem 0;
     border: 1px solid rgba(255, 209, 102, 0.55);

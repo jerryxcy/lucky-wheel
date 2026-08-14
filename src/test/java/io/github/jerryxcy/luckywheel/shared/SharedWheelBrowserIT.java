@@ -131,6 +131,177 @@ class SharedWheelBrowserIT {
     }
 
     @Test
+    void editsACompleteSharedWheelAndReopensTheServerConfirmedSnapshot() {
+        page.navigate(baseUrl());
+        page.evaluate("""
+                localStorage.setItem('luckyWheel.roster', JSON.stringify([
+                  {name: 'Alice', eligible: true},
+                  {name: 'Bob', eligible: true}
+                ]));
+                """);
+        page.reload();
+        page.locator("#mode-badge").click();
+        page.locator("#shared-wheel-mode").click();
+        page.locator("#shared-wheel-name-input").fill("On-call");
+        page.locator("#confirm-create-shared-wheel").click();
+        page.waitForURL(Pattern.compile(".*/shared-wheels/[0-9a-f-]{36}$"));
+        String sharedUrl = page.url();
+        page.locator("#close-shared-wheel-command").click();
+
+        page.locator("#drawer-toggle").click();
+        page.locator("#member-list input").nth(0).click();
+        assertThat(page.locator("#member-list input").nth(0)).not().isChecked();
+        page.locator("#member-name-input").fill("Carol");
+        page.locator("#add-member-form button[type='submit']").click();
+        assertThat(page.locator("#member-list .member-name"))
+                .hasText(new String[]{"Alice", "Bob", "Carol"});
+        page.getByLabel("Remove Bob").click();
+        page.locator("#bulk-import-textarea").fill("David, Eve");
+        page.locator("#bulk-import-button").click();
+        assertThat(page.locator("#member-list .member-name"))
+                .hasText(new String[]{"Alice", "Carol", "David", "Eve"});
+        page.locator("#recheck-all-button").click();
+        assertThat(page.locator("#member-list input:not(:checked)")).hasCount(0);
+        page.locator("#drawer-close").click();
+        page.locator("#auto-remove-toggle").click();
+        assertThat(page.locator("#auto-remove-toggle")).isChecked();
+
+        page.locator("#mode-badge").click();
+        page.locator("#rename-shared-wheel-input").fill("Primary on-call");
+        page.locator("#rename-shared-wheel-button").click();
+        assertThat(page.locator("#mode-label")).hasText("Primary on-call");
+
+        page.reload();
+        assertThat(page.locator("#mode-label")).hasText("Primary on-call");
+        assertThat(page.locator("#member-list .member-name"))
+                .hasText(new String[]{"Alice", "Carol", "David", "Eve"});
+        assertThat(page.locator("#member-list input:not(:checked)")).hasCount(0);
+        assertThat(page.locator("#auto-remove-toggle")).isChecked();
+
+        Page reopened = context.newPage();
+        reopened.navigate(sharedUrl);
+        assertThat(reopened.locator("#mode-label")).hasText("Primary on-call");
+        assertThat(reopened.locator("#member-list .member-name"))
+                .hasText(new String[]{"Alice", "Carol", "David", "Eve"});
+    }
+
+    @Test
+    void staleEditLoadsLatestStateRevertsTheControlAndPreservesUnsentText() {
+        page.navigate(baseUrl());
+        page.evaluate("""
+                localStorage.setItem('luckyWheel.roster', JSON.stringify([
+                  {name: 'Alice', eligible: true}
+                ]));
+                """);
+        page.reload();
+        page.locator("#mode-badge").click();
+        page.locator("#shared-wheel-mode").click();
+        page.locator("#shared-wheel-name-input").fill("On-call");
+        page.locator("#confirm-create-shared-wheel").click();
+        page.waitForURL(Pattern.compile(".*/shared-wheels/[0-9a-f-]{36}$"));
+        String sharedUrl = page.url();
+        page.locator("#close-shared-wheel-command").click();
+
+        Page stalePage = context.newPage();
+        stalePage.navigate(sharedUrl);
+        assertThat(stalePage.locator("#mode-label")).hasText("On-call");
+        stalePage.locator("#drawer-toggle").click();
+        stalePage.locator("#member-name-input").fill("Draft name");
+
+        page.locator("#drawer-toggle").click();
+        page.locator("#member-name-input").fill("Changed elsewhere");
+        page.locator("#add-member-form button[type='submit']").click();
+        assertThat(page.locator("#member-list .member-name"))
+                .hasText(new String[]{"Alice", "Changed elsewhere"});
+
+        stalePage.locator("#member-list input").first().click();
+
+        assertThat(stalePage.locator("#shared-roster-update-notice"))
+                .containsText("changed in another browser");
+        assertThat(stalePage.locator("#member-list input").first()).isChecked();
+        assertThat(stalePage.locator("#member-list .member-name"))
+                .hasText(new String[]{"Alice", "Changed elsewhere"});
+        assertThat(stalePage.locator("#member-name-input")).hasValue("Draft name");
+    }
+
+    @Test
+    void sharedUpdateValidationUsesLocalizedFeedbackAndPreservesTheInput() {
+        page.navigate(baseUrl());
+        page.evaluate("""
+                localStorage.setItem('luckyWheel.roster', JSON.stringify([
+                  {name: 'Alice', eligible: true}
+                ]));
+                localStorage.setItem('luckyWheel.language', 'zh-Hant');
+                """);
+        page.reload();
+        page.locator("#mode-badge").click();
+        page.locator("#shared-wheel-mode").click();
+        page.locator("#shared-wheel-name-input").fill("值班");
+        page.locator("#confirm-create-shared-wheel").click();
+        page.waitForURL(Pattern.compile(".*/shared-wheels/[0-9a-f-]{36}$"));
+        page.locator("#close-shared-wheel-command").click();
+        page.route("**/api/shared-wheels/*", route -> route.fulfill(
+                new com.microsoft.playwright.Route.FulfillOptions()
+                        .setStatus(400)
+                        .setContentType("application/problem+json")
+                        .setBody("""
+                                {"type":"https://github.com/jerryxcy/lucky-wheel/problems/shared-wheel-validation",
+                                 "detail":"Shared Wheel validation failed."}
+                                """)
+        ));
+
+        page.locator("#drawer-toggle").click();
+        page.locator("#member-name-input").fill("Bob");
+        page.locator("#add-member-form button[type='submit']").click();
+
+        assertThat(page.locator("#shared-roster-update-notice"))
+                .containsText("請檢查轉盤名稱與名單後再試一次");
+        assertThat(page.locator("#member-name-input")).hasValue("Bob");
+        assertThat(page.locator("#member-list .member-name")).hasText(new String[]{"Alice"});
+    }
+
+    @Test
+    void localAndSharedRosterEditingUseTheSameDomainLimits() {
+        page.navigate(baseUrl());
+        page.locator("#drawer-toggle").click();
+        page.locator("#bulk-import-textarea").fill("A".repeat(81));
+        page.locator("#bulk-import-button").click();
+        assertThat(page.locator("#bulk-import-notice"))
+                .containsText("Names must be at most 80 characters");
+        assertThat(page.locator("#member-list li")).hasCount(0);
+
+        page.evaluate("""
+                localStorage.setItem('luckyWheel.roster', JSON.stringify(
+                  Array.from({length: 100}, (_, index) => ({
+                    name: `Member ${index + 1}`,
+                    eligible: true
+                  }))
+                ));
+                """);
+        page.reload();
+        page.locator("#drawer-toggle").click();
+        page.locator("#member-name-input").fill("Overflow");
+        page.locator("#add-member-form button[type='submit']").click();
+        assertThat(page.locator("#add-member-notice"))
+                .containsText("A roster may contain at most 100 members");
+        assertThat(page.locator("#member-list li")).hasCount(100);
+        page.locator("#drawer-close").click();
+
+        page.locator("#mode-badge").click();
+        page.locator("#shared-wheel-mode").click();
+        page.locator("#shared-wheel-name-input").fill("Full roster");
+        page.locator("#confirm-create-shared-wheel").click();
+        page.waitForURL(Pattern.compile(".*/shared-wheels/[0-9a-f-]{36}$"));
+        page.locator("#close-shared-wheel-command").click();
+        page.locator("#drawer-toggle").click();
+        page.locator("#member-name-input").fill("Still overflow");
+        page.locator("#add-member-form button[type='submit']").click();
+        assertThat(page.locator("#add-member-notice"))
+                .containsText("A roster may contain at most 100 members");
+        assertThat(page.locator("#member-list li")).hasCount(100);
+    }
+
+    @Test
     void failedCreationPreservesTheLocalWheel() {
         page.navigate(baseUrl());
         page.evaluate("""

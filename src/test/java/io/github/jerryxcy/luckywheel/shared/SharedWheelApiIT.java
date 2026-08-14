@@ -12,6 +12,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +25,9 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -93,6 +97,257 @@ class SharedWheelApiIT {
 
         assertThat(reopened.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(reopened.getBody()).isEqualTo(createdSnapshot);
+    }
+
+    @Test
+    void currentVersionPutReplacesTheCompleteAggregateAndAdvancesVersion() {
+        ResponseEntity<JsonNode> created = http.postForEntity(
+                "/api/shared-wheels",
+                jsonRequest(Map.of(
+                        "name", "Original",
+                        "autoRemove", false,
+                        "members", List.of(
+                                Map.of("name", "Alice", "eligible", true),
+                                Map.of("name", "Bob", "eligible", false)
+                        )
+                )),
+                JsonNode.class
+        );
+        URI location = created.getHeaders().getLocation();
+
+        ResponseEntity<JsonNode> updated = http.exchange(
+                location,
+                HttpMethod.PUT,
+                jsonRequest(Map.of(
+                        "expectedVersion", 0,
+                        "name", "Updated",
+                        "autoRemove", true,
+                        "members", List.of(
+                                Map.of("name", "Bob", "eligible", true),
+                                Map.of("name", "Carol", "eligible", false)
+                        )
+                )),
+                JsonNode.class
+        );
+
+        assertThat(updated.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(updated.getBody()).isNotNull();
+        assertThat(updated.getBody().required("id")).isEqualTo(created.getBody().required("id"));
+        assertThat(updated.getBody().required("name").textValue()).isEqualTo("Updated");
+        assertThat(updated.getBody().required("version").longValue()).isEqualTo(1);
+        assertThat(updated.getBody().required("autoRemove").booleanValue()).isTrue();
+        assertThat(updated.getBody().required("members").findValuesAsText("name"))
+                .containsExactly("Bob", "Carol");
+        assertThat(updated.getBody().required("members").get(0).required("eligible").booleanValue()).isTrue();
+        assertThat(updated.getBody().required("members").get(1).required("eligible").booleanValue()).isFalse();
+        assertThat(updated.getBody().required("latestSpin").isNull()).isTrue();
+        assertThat(updated.getBody().required("expiresAt").isNull()).isTrue();
+
+        ResponseEntity<JsonNode> reopened = http.getForEntity(location, JsonNode.class);
+        assertThat(reopened.getBody()).isEqualTo(updated.getBody());
+    }
+
+    @Test
+    void childOnlyPutAdvancesTheAggregateVersionExactlyOnce() {
+        ResponseEntity<JsonNode> created = createWheel(
+                "Roster",
+                false,
+                List.of(
+                        Map.of("name", "Alice", "eligible", true),
+                        Map.of("name", "Bob", "eligible", true)
+                )
+        );
+
+        ResponseEntity<JsonNode> updated = putWheel(
+                created.getHeaders().getLocation(),
+                Map.of(
+                        "expectedVersion", 0,
+                        "name", "Roster",
+                        "autoRemove", false,
+                        "members", List.of(
+                                Map.of("name", "Bob", "eligible", false),
+                                Map.of("name", "Alice", "eligible", true)
+                        )
+                )
+        );
+
+        assertThat(updated.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(updated.getBody().required("version").longValue()).isEqualTo(1);
+        assertThat(updated.getBody().required("members").findValuesAsText("name"))
+                .containsExactly("Bob", "Alice");
+        assertThat(http.getForEntity(created.getHeaders().getLocation(), JsonNode.class).getBody())
+                .isEqualTo(updated.getBody());
+    }
+
+    @Test
+    void identicalCurrentVersionPutIsANoop() {
+        ResponseEntity<JsonNode> created = createWheel(
+                "Roster",
+                true,
+                List.of(Map.of("name", "Alice", "eligible", false))
+        );
+
+        ResponseEntity<JsonNode> unchanged = putWheel(
+                created.getHeaders().getLocation(),
+                Map.of(
+                        "expectedVersion", 0,
+                        "name", "Roster",
+                        "autoRemove", true,
+                        "members", List.of(Map.of("name", "Alice", "eligible", false))
+                )
+        );
+
+        assertThat(unchanged.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(unchanged.getBody()).isEqualTo(created.getBody());
+        assertThat(http.getForEntity(created.getHeaders().getLocation(), JsonNode.class).getBody())
+                .isEqualTo(created.getBody());
+    }
+
+    @Test
+    void stalePutReturnsConflictEvenWhenItsRepresentationMatchesCurrentState() {
+        ResponseEntity<JsonNode> created = createWheel("Roster", false, List.of());
+        URI location = created.getHeaders().getLocation();
+        ResponseEntity<JsonNode> current = putWheel(
+                location,
+                Map.of(
+                        "expectedVersion", 0,
+                        "name", "Renamed",
+                        "autoRemove", false,
+                        "members", List.of()
+                )
+        );
+
+        ResponseEntity<JsonNode> conflict = putWheel(
+                location,
+                Map.of(
+                        "expectedVersion", 0,
+                        "name", "Renamed",
+                        "autoRemove", false,
+                        "members", List.of()
+                )
+        );
+
+        assertThat(conflict.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(conflict.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+        assertThat(conflict.getBody().required("type").textValue())
+                .isEqualTo(PROBLEM_BASE + "shared-wheel-version-conflict");
+        assertThat(conflict.getBody().required("status").intValue()).isEqualTo(409);
+        assertThat(conflict.getBody().required("currentVersion").longValue()).isEqualTo(1);
+        assertThat(conflict.getBody().toString()).doesNotContain("Exception", "shared_wheel", "SQL");
+        assertThat(http.getForEntity(location, JsonNode.class).getBody()).isEqualTo(current.getBody());
+    }
+
+    @Test
+    void concurrentPutsFromTheSameVersionDoNotLoseAnUpdate() throws Exception {
+        ResponseEntity<JsonNode> created = createWheel(
+                "Roster",
+                false,
+                List.of(Map.of("name", "Alice", "eligible", true))
+        );
+        URI location = created.getHeaders().getLocation();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            Future<ResponseEntity<JsonNode>> rename = workers.submit(() -> {
+                start.await();
+                return putWheel(location, Map.of(
+                        "expectedVersion", 0,
+                        "name", "Renamed",
+                        "autoRemove", false,
+                        "members", List.of(Map.of("name", "Alice", "eligible", true))
+                ));
+            });
+            Future<ResponseEntity<JsonNode>> changeEligibility = workers.submit(() -> {
+                start.await();
+                return putWheel(location, Map.of(
+                        "expectedVersion", 0,
+                        "name", "Roster",
+                        "autoRemove", false,
+                        "members", List.of(Map.of("name", "Alice", "eligible", false))
+                ));
+            });
+
+            start.countDown();
+            List<ResponseEntity<JsonNode>> responses = List.of(rename.get(), changeEligibility.get());
+
+            assertThat(responses).extracting(ResponseEntity::getStatusCode)
+                    .containsExactlyInAnyOrder(HttpStatus.OK, HttpStatus.CONFLICT);
+            ResponseEntity<JsonNode> conflict = responses.stream()
+                    .filter(response -> response.getStatusCode() == HttpStatus.CONFLICT)
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(conflict.getBody().required("currentVersion").longValue()).isEqualTo(1);
+        }
+
+        JsonNode finalSnapshot = http.getForEntity(location, JsonNode.class).getBody();
+        assertThat(finalSnapshot.required("version").longValue()).isEqualTo(1);
+        boolean renameWon = finalSnapshot.required("name").textValue().equals("Renamed");
+        assertThat(renameWon
+                ? finalSnapshot.required("members").get(0).required("eligible").booleanValue()
+                : finalSnapshot.required("name").textValue().equals("Roster")
+                        && !finalSnapshot.required("members").get(0).required("eligible").booleanValue())
+                .isTrue();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("invalidUpdateRequests")
+    void invalidSharedWheelUpdateReturnsFieldProblemDetails(
+            String scenario,
+            String requestJson,
+            String invalidField
+    ) {
+        ResponseEntity<JsonNode> created = createWheel("Roster", false, List.of());
+
+        ResponseEntity<JsonNode> response = http.exchange(
+                created.getHeaders().getLocation(),
+                HttpMethod.PUT,
+                jsonTextRequest(requestJson),
+                JsonNode.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
+        assertThat(response.getBody().required("type").textValue())
+                .isEqualTo(PROBLEM_BASE + "shared-wheel-validation");
+        assertThat(response.getBody().required("errors").has(invalidField)).isTrue();
+        assertThat(response.getBody().toString()).doesNotContain("Exception", "shared_wheel", "SQL");
+    }
+
+    private static Stream<Arguments> invalidUpdateRequests() {
+        return Stream.of(
+                Arguments.of(
+                        "missing expected version",
+                        "{\"name\":\"Roster\",\"autoRemove\":false,\"members\":[]}",
+                        "expectedVersion"
+                ),
+                Arguments.of(
+                        "negative expected version",
+                        "{\"expectedVersion\":-1,\"name\":\"Roster\",\"autoRemove\":false,\"members\":[]}",
+                        "expectedVersion"
+                ),
+                Arguments.of(
+                        "server-owned latest spin",
+                        "{\"expectedVersion\":0,\"name\":\"Roster\",\"autoRemove\":false,\"members\":[],"
+                                + "\"latestSpin\":{}}",
+                        "latestSpin"
+                )
+        );
+    }
+
+    @Test
+    void updatingMissingSharedWheelReturnsNotFound() {
+        ResponseEntity<JsonNode> response = putWheel(
+                URI.create(http.getRootUri() + "/api/shared-wheels/" + UUID.randomUUID()),
+                Map.of(
+                        "expectedVersion", 0,
+                        "name", "Roster",
+                        "autoRemove", false,
+                        "members", List.of()
+                )
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody().required("type").textValue())
+                .isEqualTo(PROBLEM_BASE + "shared-wheel-not-found");
     }
 
     @Test
@@ -282,6 +537,22 @@ class SharedWheelApiIT {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         return new HttpEntity<>(body, headers);
+    }
+
+    private ResponseEntity<JsonNode> createWheel(
+            String name,
+            boolean autoRemove,
+            List<?> members
+    ) {
+        return http.postForEntity(
+                "/api/shared-wheels",
+                jsonRequest(Map.of("name", name, "autoRemove", autoRemove, "members", members)),
+                JsonNode.class
+        );
+    }
+
+    private ResponseEntity<JsonNode> putWheel(URI location, Object body) {
+        return http.exchange(location, HttpMethod.PUT, jsonRequest(body), JsonNode.class);
     }
 
     private static HttpEntity<String> jsonTextRequest(String body) {
