@@ -44,6 +44,20 @@ class SharedWheelProblemDetails {
         return ResponseEntity.badRequest().body(problem);
     }
 
+    @ExceptionHandler(SharedWheelVersionConflictException.class)
+    ResponseEntity<ProblemDetail> sharedWheelVersionConflict(
+            SharedWheelVersionConflictException exception
+    ) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "The Shared Wheel changed after this request was prepared."
+        );
+        problem.setType(URI.create(PROBLEM_BASE + "shared-wheel-version-conflict"));
+        problem.setTitle("Shared Wheel version conflict");
+        problem.setProperty("currentVersion", exception.currentVersion());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
     @ExceptionHandler({
             MethodArgumentTypeMismatchException.class,
             HttpMessageNotReadableException.class

@@ -53,6 +53,8 @@ const STRINGS = {
         sharedWheelCreatedReminder: "There is no account or Shared Wheel list. Save this link now; the service cannot recover it for you if it is lost.",
         sharedWheelBookmarkHint: "Tip: press Command+D on Mac or Ctrl+D on Windows and Linux to bookmark it.",
         sharedWheelNameLabel: "Wheel name",
+        renameSharedWheelLabel: "Rename wheel",
+        renameSharedWheelButton: "Rename",
         cancel: "Cancel",
         create: "Create",
         sharedWheelLabel: "Shared Wheel",
@@ -65,7 +67,9 @@ const STRINGS = {
         problemSharedWheelValidation: "Check the Wheel name and roster, then try again.",
         problemSharedWheelInvalidRequest: "The Shared Wheel request is invalid.",
         problemSharedApiError: "The Shared Wheel request could not be completed — please try again.",
-        sharedReadOnlyNotice: "Shared editing and spinning arrive in the next implementation tickets.",
+        sharedSpinPendingNotice: "Shared spinning arrives in a later implementation ticket.",
+        sharedUpdateConflict: "This Shared Wheel changed in another browser. The latest state is loaded; review it and retry your change.",
+        sharedUpdateFailed: "Could not save this change — please try again.",
         createSharedWheelGenericError: "Could not create the Shared Wheel — please try again.",
         sharedWheelExpiry: (p) => `Expires ${p.date}`,
         drawerToggle: "⚙ Roster",
@@ -90,6 +94,8 @@ const STRINGS = {
         bulkImportButton: "Import roster",
         drawOrderHeading: "Draw order",
         pleaseEnterName: "Please enter a name.",
+        memberNameTooLong: "Names must be at most 80 characters.",
+        rosterLimit: "A roster may contain at most 100 members.",
         duplicateName: (p) => `"${p.name}" is already on the roster — names must be unique.`,
         copiedConfirmation: "Copied ✓",
         copyPromptLabel: "Copy the roster below:",
@@ -122,6 +128,8 @@ const STRINGS = {
         sharedWheelCreatedReminder: "這個服務沒有帳號或 Shared Wheel 清單。請立即保存此連結；遺失後服務無法替你找回。",
         sharedWheelBookmarkHint: "提示：Mac 按 Command+D，Windows 或 Linux 按 Ctrl+D，即可加入書籤。",
         sharedWheelNameLabel: "轉盤名稱",
+        renameSharedWheelLabel: "重新命名轉盤",
+        renameSharedWheelButton: "重新命名",
         cancel: "取消",
         create: "建立",
         sharedWheelLabel: "Shared Wheel 共享轉盤",
@@ -134,7 +142,9 @@ const STRINGS = {
         problemSharedWheelValidation: "請檢查轉盤名稱與名單後再試一次。",
         problemSharedWheelInvalidRequest: "Shared Wheel 的請求內容無效。",
         problemSharedApiError: "無法完成 Shared Wheel 請求，請再試一次。",
-        sharedReadOnlyNotice: "Shared Wheel 的修改與抽選會由接下來的 implementation tickets 完成。",
+        sharedSpinPendingNotice: "Shared Wheel 抽選會由後續 implementation ticket 完成。",
+        sharedUpdateConflict: "另一個瀏覽器已修改這個 Shared Wheel。已載入最新狀態，請確認後手動重試。",
+        sharedUpdateFailed: "無法儲存這次修改，請再試一次。",
         createSharedWheelGenericError: "無法建立 Shared Wheel，請再試一次。",
         sharedWheelExpiry: (p) => `到期時間：${p.date}`,
         drawerToggle: "⚙ 名單",
@@ -159,6 +169,8 @@ const STRINGS = {
         bulkImportButton: "匯入名單",
         drawOrderHeading: "抽籤結果 Draw order",
         pleaseEnterName: "請輸入姓名。",
+        memberNameTooLong: "姓名最多只能有 80 個字元。",
+        rosterLimit: "一份名單最多只能有 100 位成員。",
         duplicateName: (p) => `「${p.name}」已經在名單中，姓名不可重複。`,
         copiedConfirmation: "已複製 ✓",
         copyPromptLabel: "複製以下名單：",
@@ -276,6 +288,9 @@ function applyLanguage(lang) {
     if (spinErrorState) {
         spinError.textContent = t(spinErrorState.key, spinErrorState.params);
     }
+    if (sharedUpdateNoticeKey) {
+        showSharedUpdateNotice(sharedUpdateNoticeKey);
+    }
 
     renderWheelMode();
     render();
@@ -298,6 +313,12 @@ let wheelMode = "local";
 
 /** The authoritative server snapshot while in Shared Wheel mode. */
 let sharedWheelSnapshot = null;
+
+/** True while one complete Shared Wheel replacement is awaiting confirmation. */
+let sharedMutationPending = false;
+
+/** Translation key for the latest Shared update notice, or null. */
+let sharedUpdateNoticeKey = null;
 
 /** Capability flag controls whether Shared creation appears in the Local mode sheet. */
 let sharedWheelsEnabled = false;
@@ -370,6 +391,11 @@ const localWheelMode = document.getElementById("local-wheel-mode");
 const sharedWheelMode = document.getElementById("shared-wheel-mode");
 const sharedWheelCommandDetail = document.getElementById("shared-wheel-command-detail");
 const sharedWheelCommandName = document.getElementById("shared-wheel-command-name");
+const renameSharedWheelForm = document.getElementById("rename-shared-wheel-form");
+const renameSharedWheelInput = document.getElementById("rename-shared-wheel-input");
+const renameSharedWheelButton = document.getElementById("rename-shared-wheel-button");
+const sharedRosterUpdateNotice = document.getElementById("shared-roster-update-notice");
+const sharedCommandUpdateNotice = document.getElementById("shared-command-update-notice");
 const sharedWheelCreatedReminder = document.getElementById("shared-wheel-created-reminder");
 const sharedWheelExpiry = document.getElementById("shared-wheel-expiry");
 const closeSharedWheelCommand = document.getElementById("close-shared-wheel-command");
@@ -379,8 +405,8 @@ function isSharedMode() {
     return wheelMode === "shared";
 }
 
-function localWheelMutationLocked() {
-    return spinning || isSharedMode();
+function wheelMutationLocked() {
+    return spinning || sharedMutationPending;
 }
 
 // ---- Persistence (Roster lives in the browser) ----
@@ -417,6 +443,111 @@ function saveAutoRemove() {
     localStorage.setItem(AUTO_REMOVE_STORAGE_KEY, String(autoRemove));
 }
 
+function applySharedWheelSnapshot(snapshot) {
+    if (sharedWheelSnapshot && snapshot.version <= sharedWheelSnapshot.version) return false;
+    sharedWheelSnapshot = snapshot;
+    roster = snapshot.members.map((member) => ({ ...member }));
+    autoRemove = snapshot.autoRemove;
+    autoRemoveToggle.checked = autoRemove;
+    return true;
+}
+
+function showSharedUpdateNotice(key) {
+    sharedUpdateNoticeKey = key;
+    for (const notice of [sharedRosterUpdateNotice, sharedCommandUpdateNotice]) {
+        notice.textContent = t(key);
+        notice.hidden = false;
+    }
+}
+
+function hideSharedUpdateNotice() {
+    sharedUpdateNoticeKey = null;
+    for (const notice of [sharedRosterUpdateNotice, sharedCommandUpdateNotice]) {
+        notice.textContent = "";
+        notice.hidden = true;
+    }
+}
+
+async function refreshSharedWheel() {
+    const response = await fetch(`/api/shared-wheels/${encodeURIComponent(sharedWheelSnapshot.id)}`, {
+        headers: { Accept: "application/json, application/problem+json" },
+    });
+    if (!response.ok) throw new Error("Shared Wheel refresh failed");
+    applySharedWheelSnapshot(await response.json());
+}
+
+/**
+ * Sends one complete aggregate replacement and applies only a confirmed
+ * snapshot. A 409 refreshes authoritative state but never replays the user's
+ * intent; the visible notice asks them to review and retry manually.
+ */
+async function updateSharedWheel(changes) {
+    if (!isSharedMode() || sharedMutationPending) return false;
+    hideSharedUpdateNotice();
+    sharedMutationPending = true;
+    renderRosterToolsAvailability();
+    renameSharedWheelButton.disabled = true;
+    renameSharedWheelInput.disabled = true;
+
+    const request = {
+        expectedVersion: sharedWheelSnapshot.version,
+        name: changes.name ?? sharedWheelSnapshot.name,
+        autoRemove: changes.autoRemove ?? sharedWheelSnapshot.autoRemove,
+        members: (changes.members ?? roster).map((member) => ({ ...member })),
+    };
+
+    try {
+        const response = await fetch(`/api/shared-wheels/${encodeURIComponent(sharedWheelSnapshot.id)}`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json, application/problem+json",
+            },
+            body: JSON.stringify(request),
+        });
+        if (response.status === 409) {
+            await refreshSharedWheel();
+            showSharedUpdateNotice("sharedUpdateConflict");
+            return false;
+        }
+        if (!response.ok) {
+            const problem = await response.json().catch(() => null);
+            showSharedUpdateNotice(sharedProblemTranslationKey(problem) || "sharedUpdateFailed");
+            return false;
+        }
+        applySharedWheelSnapshot(await response.json());
+        return true;
+    } catch (error) {
+        console.error("Shared Wheel update failed:", error);
+        showSharedUpdateNotice("sharedUpdateFailed");
+        return false;
+    } finally {
+        sharedMutationPending = false;
+        renderWheelMode();
+        render();
+    }
+}
+
+async function commitWheelState(changes) {
+    if (isSharedMode()) {
+        if (Object.prototype.hasOwnProperty.call(changes, "autoRemove")) {
+            autoRemoveToggle.checked = autoRemove;
+        }
+        return updateSharedWheel(changes);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(changes, "members")) {
+        roster = changes.members.map((member) => ({ ...member }));
+        saveRoster();
+    }
+    if (Object.prototype.hasOwnProperty.call(changes, "autoRemove")) {
+        autoRemove = changes.autoRemove;
+        saveAutoRemove();
+    }
+    render();
+    return true;
+}
+
 // ---- Roster mutations ----
 // Guarded with `if (spinning) return;` — the reveal plays back a snapshot
 // of the eligible members taken at spin time; mutating the roster
@@ -430,37 +561,43 @@ function isDuplicateName(name) {
     return roster.some((member) => member.name === name);
 }
 
-function addMember(rawName) {
-    if (localWheelMutationLocked()) return;
+async function addMember(rawName) {
+    if (wheelMutationLocked()) return false;
     const name = normalizeName(rawName);
     if (name === "") {
         showAddMemberNotice("pleaseEnterName");
-        return;
+        return false;
+    }
+    if (name.length > 80) {
+        showAddMemberNotice("memberNameTooLong");
+        return false;
     }
     if (isDuplicateName(name)) {
         showAddMemberNotice("duplicateName", { name });
-        return;
+        return false;
+    }
+    if (roster.length >= 100) {
+        showAddMemberNotice("rosterLimit");
+        return false;
     }
     hideAddMemberNotice();
-    roster.push({ name, eligible: true });
-    saveRoster();
-    render();
+    const members = [...roster, { name, eligible: true }];
+    return commitWheelState({ members });
 }
 
-function removeMember(name) {
-    if (localWheelMutationLocked()) return;
-    roster = roster.filter((member) => member.name !== name);
-    saveRoster();
-    render();
+async function removeMember(name) {
+    if (wheelMutationLocked()) return false;
+    const members = roster.filter((member) => member.name !== name);
+    return commitWheelState({ members });
 }
 
-function setEligible(name, eligible) {
-    if (localWheelMutationLocked()) return;
-    const member = roster.find((m) => m.name === name);
-    if (!member) return;
-    member.eligible = eligible;
-    saveRoster();
-    render();
+async function setEligible(name, eligible) {
+    if (wheelMutationLocked()) return false;
+    if (!roster.some((member) => member.name === name)) return false;
+    const members = roster.map((member) => member.name === name
+        ? { ...member, eligible }
+        : { ...member });
+    return commitWheelState({ members });
 }
 
 function eligibleMembers() {
@@ -472,13 +609,10 @@ function eligibleMembers() {
  * completes": sets every member back to eligible, regardless of how they
  * became ineligible (manual uncheck or auto-remove).
  */
-function recheckAll() {
-    if (localWheelMutationLocked()) return;
-    for (const member of roster) {
-        member.eligible = true;
-    }
-    saveRoster();
-    render();
+async function recheckAll() {
+    if (wheelMutationLocked()) return false;
+    const members = roster.map((member) => ({ ...member, eligible: true }));
+    return commitWheelState({ members });
 }
 
 /**
@@ -516,29 +650,40 @@ function splitPastedNames(text) {
  * default), skipping names already on the roster and duplicates within the
  * pasted text itself. Reports how many were added vs. skipped.
  */
-function importBulk(rawText) {
-    if (localWheelMutationLocked()) return;
+async function importBulk(rawText) {
+    if (wheelMutationLocked()) return false;
     const names = splitPastedNames(rawText);
     if (names.length === 0) {
         showBulkImportNotice("bulkImportEmpty");
-        return;
+        return false;
+    }
+    if (names.some((name) => name.length > 80)) {
+        showBulkImportNotice("memberNameTooLong");
+        return false;
     }
 
     let added = 0;
     let skipped = 0;
+    const existing = new Set(roster.map((member) => member.name));
+    const members = roster.map((member) => ({ ...member }));
     for (const name of names) {
-        if (isDuplicateName(name)) {
+        if (existing.has(name)) {
             skipped++;
             continue;
         }
-        roster.push({ name, eligible: true });
+        existing.add(name);
+        members.push({ name, eligible: true });
         added++;
     }
+    if (members.length > 100) {
+        showBulkImportNotice("rosterLimit");
+        return false;
+    }
 
-    saveRoster();
+    if (!await commitWheelState({ members })) return false;
     bulkImportTextarea.value = "";
-    render();
     showBulkImportNotice("bulkImportResult", { added, skipped });
+    return true;
 }
 
 /**
@@ -824,13 +969,16 @@ function render() {
 }
 
 function renderRosterToolsAvailability() {
-    const locked = localWheelMutationLocked();
+    const locked = wheelMutationLocked();
     memberNameInput.disabled = locked;
     addMemberForm.querySelector("button[type='submit']").disabled = locked;
     bulkImportTextarea.disabled = locked;
     bulkImportButton.disabled = locked;
     recheckAllButton.disabled = locked;
     autoRemoveToggle.disabled = locked;
+    memberList.querySelectorAll("input, button").forEach((control) => {
+        control.disabled = locked;
+    });
 }
 
 function renderMemberList() {
@@ -844,9 +992,13 @@ function renderMemberList() {
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = member.eligible;
-        checkbox.disabled = localWheelMutationLocked();
+        checkbox.disabled = wheelMutationLocked();
         checkbox.setAttribute("aria-label", t("eligibleAria", { name: member.name }));
-        checkbox.addEventListener("change", () => setEligible(member.name, checkbox.checked));
+        checkbox.addEventListener("change", () => {
+            const requestedEligibility = checkbox.checked;
+            if (isSharedMode()) checkbox.checked = member.eligible;
+            setEligible(member.name, requestedEligibility);
+        });
 
         const nameSpan = document.createElement("span");
         nameSpan.className = "member-name";
@@ -855,7 +1007,7 @@ function renderMemberList() {
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.textContent = t("removeButtonText");
-        removeButton.disabled = localWheelMutationLocked();
+        removeButton.disabled = wheelMutationLocked();
         removeButton.setAttribute("aria-label", t("removeAria", { name: member.name }));
         removeButton.addEventListener("click", () => removeMember(member.name));
 
@@ -876,8 +1028,8 @@ function renderCountOptions() {
         countSelect.appendChild(option);
     }
 
-    countSelect.disabled = localWheelMutationLocked() || eligibleCount === 0;
-    orderEveryoneButton.disabled = localWheelMutationLocked() || eligibleCount === 0;
+    countSelect.disabled = wheelMutationLocked() || isSharedMode() || eligibleCount === 0;
+    orderEveryoneButton.disabled = wheelMutationLocked() || isSharedMode() || eligibleCount === 0;
 
     if (eligibleCount > 0) {
         const restoredValue = Number(previousValue);
@@ -891,7 +1043,7 @@ function renderSpinAvailability() {
     const eligibleCount = eligibleMembers().length;
     let reason = null;
     if (isSharedMode()) {
-        reason = t("sharedReadOnlyNotice");
+        reason = t("sharedSpinPendingNotice");
     } else if (roster.length === 0) {
         reason = t("spinDisabledEmptyRoster");
     } else if (eligibleCount === 0) {
@@ -1077,9 +1229,11 @@ drawerClose.addEventListener("click", closeDrawer);
 drawerBackdrop.addEventListener("click", closeDrawer);
 
 function handleAddMemberSubmit() {
-    addMember(memberNameInput.value);
-    memberNameInput.value = "";
-    memberNameInput.focus();
+    const submittedInSharedMode = isSharedMode();
+    addMember(memberNameInput.value).then((saved) => {
+        if (saved || !submittedInSharedMode) memberNameInput.value = "";
+        memberNameInput.focus();
+    });
 }
 
 addMemberForm.addEventListener("submit", (event) => {
@@ -1114,10 +1268,10 @@ orderEveryoneButton.addEventListener("click", () => {
 });
 
 autoRemoveToggle.checked = autoRemove;
-autoRemoveToggle.addEventListener("change", () => {
-    if (localWheelMutationLocked()) return;
-    autoRemove = autoRemoveToggle.checked;
-    saveAutoRemove();
+autoRemoveToggle.addEventListener("change", async () => {
+    if (wheelMutationLocked()) return;
+    const requestedAutoRemove = autoRemoveToggle.checked;
+    await commitWheelState({ autoRemove: requestedAutoRemove });
 });
 
 recheckAllButton.addEventListener("click", recheckAll);
@@ -1149,6 +1303,8 @@ function renderWheelMode() {
     modeBadge.classList.toggle("shared", shared);
     modeBadge.setAttribute("aria-haspopup", "dialog");
     sharedWheelCommandName.textContent = sharedWheelSnapshot?.name || "";
+    renameSharedWheelButton.disabled = sharedMutationPending;
+    renameSharedWheelInput.disabled = sharedMutationPending;
 
     localWheelMode.classList.toggle("active", !shared);
     sharedWheelMode.classList.toggle("active", shared);
@@ -1177,7 +1333,7 @@ function openCreateSharedWheelDialog() {
     sharedWheelNameInput.focus();
 }
 
-function sharedProblemMessage(problem) {
+function sharedProblemTranslationKey(problem) {
     const knownTypes = {
         "https://github.com/jerryxcy/lucky-wheel/problems/shared-wheel-not-found":
             "problemSharedWheelNotFound",
@@ -1188,7 +1344,11 @@ function sharedProblemMessage(problem) {
         "https://github.com/jerryxcy/lucky-wheel/problems/shared-api-error":
             "problemSharedApiError",
     };
-    const translationKey = knownTypes[problem?.type];
+    return knownTypes[problem?.type] || null;
+}
+
+function sharedProblemMessage(problem) {
+    const translationKey = sharedProblemTranslationKey(problem);
     if (translationKey) return t(translationKey);
     return problem?.detail || t("createSharedWheelGenericError");
 }
@@ -1256,20 +1416,19 @@ async function bootstrapWheel() {
                 headers: { Accept: "application/json, application/problem+json" },
             });
             if (!response.ok) throw new Error("Shared Wheel unavailable");
-            sharedWheelSnapshot = await response.json();
+            const snapshot = await response.json();
             wheelMode = "shared";
             try {
                 showSharedWheelCreatedReminder =
-                    sessionStorage.getItem(CREATED_SHARED_WHEEL_KEY) === sharedWheelSnapshot.id;
+                    sessionStorage.getItem(CREATED_SHARED_WHEEL_KEY) === snapshot.id;
                 if (showSharedWheelCreatedReminder) {
                     sessionStorage.removeItem(CREATED_SHARED_WHEEL_KEY);
                 }
             } catch (error) {
                 console.warn("Could not read Shared Wheel creation state:", error);
             }
-            roster = sharedWheelSnapshot.members.map((member) => ({ ...member }));
-            autoRemove = sharedWheelSnapshot.autoRemove;
-            autoRemoveToggle.checked = autoRemove;
+            applySharedWheelSnapshot(snapshot);
+            renameSharedWheelInput.value = snapshot.name;
         } catch (error) {
             console.error("Failed to open Shared Wheel:", error);
             wheelMode = "shared-unavailable";
@@ -1300,6 +1459,11 @@ cancelCreateSharedWheel.addEventListener("click", () => createSharedWheelDialog.
 createSharedWheelForm.addEventListener("submit", (event) => {
     event.preventDefault();
     createSharedWheel();
+});
+renameSharedWheelForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const saved = await updateSharedWheel({ name: renameSharedWheelInput.value });
+    if (saved) renameSharedWheelInput.value = sharedWheelSnapshot.name;
 });
 modeBadge.addEventListener("click", () => {
     sharedWheelCommandSheet.showModal();

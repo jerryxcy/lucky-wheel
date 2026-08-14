@@ -24,6 +24,12 @@ import java.util.UUID;
 @Table(name = "shared_wheel")
 class SharedWheel {
 
+    enum Replacement {
+        UNCHANGED,
+        ROOT_CHANGED,
+        MEMBERS_ONLY
+    }
+
     @Id
     private UUID id;
 
@@ -48,39 +54,40 @@ class SharedWheel {
     }
 
     static SharedWheel create(CreateSharedWheelRequest request) {
-        ValidatedCreate validated = validate(request);
+        if (request == null) {
+            throw requiredRequest();
+        }
+        ValidatedWheelState validated = validateState(
+                request.name(),
+                request.autoRemove(),
+                request.members()
+        );
         SharedWheel wheel = new SharedWheel();
         wheel.id = UUID.randomUUID();
         wheel.name = validated.name();
         wheel.autoRemove = validated.autoRemove();
-        for (int position = 0; position < validated.members().size(); position++) {
-            SharedWheelMemberInput member = validated.members().get(position);
-            wheel.members.add(SharedWheelMember.create(
-                    wheel,
-                    position,
-                    member.name(),
-                    member.eligible()
-            ));
-        }
+        wheel.replaceMembers(validated.members());
         return wheel;
     }
 
-    private static ValidatedCreate validate(CreateSharedWheelRequest request) {
-        Map<String, String> errors = new LinkedHashMap<>();
-        if (request == null) {
-            errors.put("request", "Request body is required.");
-            throw new SharedWheelValidationException(errors);
-        }
+    private static SharedWheelValidationException requiredRequest() {
+        return new SharedWheelValidationException(Map.of("request", "Request body is required."));
+    }
 
-        String normalizedName = normalizeName(request.name());
+    private static ValidatedWheelState validateState(
+            String requestedName,
+            Boolean requestedAutoRemove,
+            List<SharedWheelMemberInput> requestedMembers
+    ) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        String normalizedName = normalizeName(requestedName);
         validateName("name", normalizedName, "Wheel name", errors);
 
-        if (request.autoRemove() == null) {
+        if (requestedAutoRemove == null) {
             errors.put("autoRemove", "Auto-remove is required.");
         }
 
         List<SharedWheelMemberInput> normalizedMembers = new ArrayList<>();
-        List<SharedWheelMemberInput> requestedMembers = request.members();
         if (requestedMembers == null) {
             errors.put("members", "Members are required; use an empty array for an empty roster.");
         } else {
@@ -114,7 +121,11 @@ class SharedWheel {
         if (!errors.isEmpty()) {
             throw new SharedWheelValidationException(errors);
         }
-        return new ValidatedCreate(normalizedName, request.autoRemove(), List.copyOf(normalizedMembers));
+        return new ValidatedWheelState(
+                normalizedName,
+                requestedAutoRemove,
+                List.copyOf(normalizedMembers)
+        );
     }
 
     private static String normalizeName(String name) {
@@ -134,7 +145,7 @@ class SharedWheel {
         }
     }
 
-    private record ValidatedCreate(
+    private record ValidatedWheelState(
             String name,
             boolean autoRemove,
             List<SharedWheelMemberInput> members
@@ -163,6 +174,80 @@ class SharedWheel {
 
     List<SharedWheelMember> members() {
         return Collections.unmodifiableList(members);
+    }
+
+    Replacement replace(UpdateSharedWheelRequest request) {
+        if (request == null) {
+            throw requiredRequest();
+        }
+        validateExpectedVersion(request.expectedVersion());
+        if (request.expectedVersion() != version) {
+            throw new SharedWheelVersionConflictException(id, version);
+        }
+        if (!request.unexpectedFields().isEmpty()) {
+            Map<String, String> errors = new LinkedHashMap<>();
+            request.unexpectedFields().keySet()
+                    .forEach(field -> errors.put(field, "Field is not accepted by Shared Wheel updates."));
+            throw new SharedWheelValidationException(errors);
+        }
+
+        ValidatedWheelState validated = validateState(
+                request.name(),
+                request.autoRemove(),
+                request.members()
+        );
+        boolean rootChanged = !name.equals(validated.name())
+                || autoRemove != validated.autoRemove();
+        boolean membersChanged = !membersMatch(validated.members());
+        if (!rootChanged && !membersChanged) {
+            return Replacement.UNCHANGED;
+        }
+
+        name = validated.name();
+        autoRemove = validated.autoRemove();
+        replaceMembers(validated.members());
+        return rootChanged ? Replacement.ROOT_CHANGED : Replacement.MEMBERS_ONLY;
+    }
+
+    private void validateExpectedVersion(Long expectedVersion) {
+        if (expectedVersion == null) {
+            throw new SharedWheelValidationException(Map.of(
+                    "expectedVersion", "Expected version is required."
+            ));
+        }
+        if (expectedVersion < 0) {
+            throw new SharedWheelValidationException(Map.of(
+                    "expectedVersion", "Expected version must not be negative."
+            ));
+        }
+    }
+
+    private boolean membersMatch(List<SharedWheelMemberInput> requestedMembers) {
+        if (members.size() != requestedMembers.size()) {
+            return false;
+        }
+        for (int index = 0; index < members.size(); index++) {
+            SharedWheelMember current = members.get(index);
+            SharedWheelMemberInput requested = requestedMembers.get(index);
+            if (!current.name().equals(requested.name())
+                    || current.eligible() != requested.eligible()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void replaceMembers(List<SharedWheelMemberInput> replacements) {
+        members.clear();
+        for (int position = 0; position < replacements.size(); position++) {
+            SharedWheelMemberInput member = replacements.get(position);
+            members.add(SharedWheelMember.create(
+                    this,
+                    position,
+                    member.name(),
+                    member.eligible()
+            ));
+        }
     }
 
     void rename(String requestedName) {

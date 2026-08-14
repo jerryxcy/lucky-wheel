@@ -74,6 +74,7 @@
             <h2 id="roster-heading" data-i18n="rosterHeading">名單 Roster</h2>
             <button type="button" id="drawer-close" data-i18n="close" data-i18n-aria-label="drawerCloseAria" aria-label="關閉名單">關閉</button>
         </div>
+        <p id="shared-roster-update-notice" class="notice" role="status" hidden></p>
 
         <form id="add-member-form">
             <label for="member-name-input" class="visually-hidden" data-i18n="memberNameLabel">成員姓名</label>
@@ -81,6 +82,7 @@
                 type="text"
                 id="member-name-input"
                 name="memberName"
+                maxlength="80"
                 data-i18n-placeholder="memberNamePlaceholder"
                 placeholder="輸入姓名後按 Enter 或「新增」"
                 autocomplete="off"
@@ -155,6 +157,14 @@
         <section id="shared-wheel-command-detail" class="command-sheet-detail" hidden>
             <span class="command-sheet-eyebrow" data-i18n="currentSharedWheel">Current Shared Wheel</span>
             <h3 id="shared-wheel-command-name"></h3>
+            <form id="rename-shared-wheel-form" class="rename-shared-wheel-form">
+                <label for="rename-shared-wheel-input" data-i18n="renameSharedWheelLabel">Rename wheel</label>
+                <div>
+                    <input id="rename-shared-wheel-input" type="text" maxlength="80" required autocomplete="off">
+                    <button type="submit" id="rename-shared-wheel-button" data-i18n="renameSharedWheelButton">Rename</button>
+                </div>
+            </form>
+            <p id="shared-command-update-notice" class="notice" role="status" hidden></p>
             <div id="shared-wheel-created-reminder" class="shared-wheel-created-reminder" role="status" hidden>
                 <strong data-i18n="sharedWheelCreatedHeading">Shared Wheel created</strong>
                 <p data-i18n="sharedWheelCreatedReminder">There is no account or Shared Wheel list. Save this link now; the service cannot recover it for you if it is lost.</p>
